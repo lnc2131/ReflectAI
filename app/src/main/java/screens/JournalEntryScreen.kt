@@ -1,5 +1,3 @@
-
-
 package screens
 
 import androidx.compose.foundation.layout.*
@@ -25,6 +23,9 @@ fun JournalEntryScreen(
     var isAnalyzing by remember { mutableStateOf(false) }
     val analysis by viewModel.analysis.collectAsState()
 
+    // Add state for API test result
+    var apiTestMessage by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -44,6 +45,25 @@ fun JournalEntryScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Add the test button at the top
+            Button(
+                onClick = {
+                    viewModel.testApiKey()
+                    apiTestMessage = "Check Logcat for API key details"
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Test API Key")
+            }
+
+            // Show test message if available
+            if (apiTestMessage.isNotEmpty()) {
+                Text(
+                    text = apiTestMessage,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
             OutlinedTextField(
                 value = entryTitle,
                 onValueChange = { entryTitle = it },

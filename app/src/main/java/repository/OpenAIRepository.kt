@@ -8,6 +8,7 @@ import model.AIAnalysis
 import model.JournalEntry
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import com.example.reflectai.BuildConfig
 
 class OpenAIRepository : AIAnalysisRepository {
     private val database = FirebaseDatabase.getInstance()

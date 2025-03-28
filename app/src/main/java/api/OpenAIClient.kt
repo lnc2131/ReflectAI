@@ -8,7 +8,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object OpenAIClient {
-    private const val BASE_URL = "https://api.openai.com/"
+    const val BASE_URL = "https://api.openai.com/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -32,7 +32,9 @@ object OpenAIClient {
     // Helper function to format the authorization header
     fun getAuthHeader(): String {
         val apiKey = BuildConfig.OPENAI_API_KEY
-        println("API Key (first 5 chars): ${apiKey.take(5)}...") // Logs just the start of the key for debugging
+        println("API Key length: ${apiKey.length}")
+        println("API Key first 5 chars: ${apiKey.take(5)}...")
+        println("API Key is empty: ${apiKey.isEmpty()}")
         return "Bearer $apiKey"
     }
 }
