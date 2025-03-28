@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "459016046955",
+    "project_id": "reflectai-2140d",
+    "storage_bucket": "reflectai-2140d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:459016046955:android:f37ab9547fb261596c242e",
+        "android_client_info": {
+          "package_name": "com.example.reflectai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3ueDBk0LmEYTSjArHHNLvr6xtbZBFlrQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
