@@ -13,23 +13,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.reflectai.ui.theme.ReflectAITheme
 import com.google.firebase.database.FirebaseDatabase
+import androidx.navigation.compose.rememberNavController
+import navigation.AppNavigation
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val database = FirebaseDatabase.getInstance()
-        val testRef = database.getReference("test")
-
         enableEdgeToEdge()
+        val database = FirebaseDatabase.getInstance()
+        val testref = database.getReference("test")
         setContent {
-            MainScreen()
+            ReflectAITheme {
+                val navController = rememberNavController()
+                Scaffold {innerPadding ->
+                    AppNavigation(
+                        navController = navController,
+                        modifier = Modifier.fillMaxSize().padding(innerPadding)
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 fun MainScreen() {
-    Text(text = "ReflectAI is connected to Firebase!")
+
 }
 
 

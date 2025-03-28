@@ -114,4 +114,42 @@ class FirebaseJournalRepository : JournalRepository {
             }
     }
 
+    override suspend fun deleteJournalEntry(entryId: String): Boolean = suspendCancellableCoroutine { continuation ->
+        // We need to find which user this entry belongs to
+        entriesRef.get().addOnSuccessListener { usersSnapshot ->
+            var deleted = false
+
+            for (userSnapshot in usersSnapshot.children) {
+                val userId = userSnapshot.key
+                if (userId != null) {
+                    entriesRef.child(userId).child(entryId).get().addOnSuccessListener { entrySnapshot ->
+                        if (entrySnapshot.exists()) {
+                            // Found the entry, now delete it
+                            entriesRef.child(userId).child(entryId).removeValue()
+                                .addOnSuccessListener {
+                                    // Also delete any associated analysis
+                                    val aiAnalysisRef = database.getReference("ai_analysis")
+                                    aiAnalysisRef.child(entryId).removeValue()
+
+                                    deleted = true
+                                    continuation.resume(true)
+                                }
+                                .addOnFailureListener {
+                                    continuation.resume(false)
+                                }
+                            return@addOnSuccessListener
+                        }
+                    }
+                }
+            }
+
+            // If we get here, entry wasn't found
+            if (!deleted) {
+                continuation.resume(false)
+            }
+        }.addOnFailureListener {
+            continuation.resume(false)
+        }
+    }
+
 }
