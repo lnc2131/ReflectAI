@@ -35,12 +35,12 @@ class OpenAIRepository : AIAnalysisRepository {
 
             val request = OpenAIRequest(messages = messages)
 
-            // Make the API call
+            println("About to call OpenAI API with entry: ${journalEntry.id}")            // Make the API call
             val response = OpenAIClient.service.createChatCompletion(
                 authorization = OpenAIClient.getAuthHeader(),
                 request = request
             )
-
+            println("OpenAI API response status: ${response.isSuccessful}")
             if (response.isSuccessful) {
                 val responseBody = response.body()
                 val aiContent = responseBody?.choices?.firstOrNull()?.message?.content ?: ""

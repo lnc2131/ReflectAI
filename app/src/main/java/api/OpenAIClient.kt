@@ -31,6 +31,8 @@ object OpenAIClient {
 
     // Helper function to format the authorization header
     fun getAuthHeader(): String {
-        return "Bearer ${BuildConfig.OPENAI_API_KEY}"
+        val apiKey = BuildConfig.OPENAI_API_KEY
+        println("API Key (first 5 chars): ${apiKey.take(5)}...") // Logs just the start of the key for debugging
+        return "Bearer $apiKey"
     }
 }

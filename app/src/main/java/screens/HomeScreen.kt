@@ -1,6 +1,5 @@
 package screens
 
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,6 +7,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import navigation.Screen
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -33,6 +34,16 @@ fun HomeScreen(navController: NavController) {
             TopAppBar(
                 title = { Text("ReflectAI Journal") }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { navController.navigate(Screen.NewEntry.route) }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Entry"
+                )
+            }
         }
     ) { padding ->
         Column(
@@ -40,23 +51,22 @@ fun HomeScreen(navController: NavController) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // This goes inside the Column in the HomeScreen
-// Month navigation
+            // Month navigation
             MonthNavigator(
                 currentMonth = currentMonth,
                 onPreviousMonth = { currentMonth = currentMonth.minusMonths(1) },
                 onNextMonth = { currentMonth = currentMonth.plusMonths(1) }
             )
 
-// Calendar grid
+            // Calendar grid
             CalendarGrid(
                 currentMonth = currentMonth,
                 onDateClick = { date ->
                     // This will handle navigation to entry view or creation
                     // For new entries on empty dates
-                    navController.navigate(navigation.Screen.NewEntry.route)
+                    navController.navigate(Screen.NewEntry.route)
                     // For existing entries (we'll update this logic later)
-                    // navController.navigate(navigation.Screen.EntryDetail.createRoute("entry-id"))
+                    // navController.navigate(Screen.EntryDetail.createRoute("entry-id"))
                 }
             )
         }
@@ -120,8 +130,7 @@ fun CalendarGrid(
             }
         }
 
-        // Add this inside the Column in CalendarGrid after the day headers
-// Calendar days
+        // Calendar days
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             modifier = Modifier.fillMaxWidth()
@@ -151,6 +160,7 @@ fun CalendarGrid(
         }
     }
 }
+
 @Composable
 fun CalendarDay(
     date: LocalDate?,

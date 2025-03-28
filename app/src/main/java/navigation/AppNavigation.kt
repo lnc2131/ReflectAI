@@ -7,6 +7,11 @@ import androidx.navigation.navArgument
 import androidx.navigation.NavType
 import androidx.compose.ui.Modifier
 import screens.HomeScreen
+import androidx.compose.runtime.remember
+import screens.JournalEntryViewModel
+import screens.JournalEntryScreen
+
+
 
 // Define all the screens in our app
 sealed class Screen(val route: String) {
@@ -50,8 +55,8 @@ fun AppNavigation(
         }
 
         composable(Screen.NewEntry.route) {
-            // NewEntryScreen will be created later
-            // NewEntryScreen(navController)
+            val viewModel = remember { JournalEntryViewModel() }
+            JournalEntryScreen(navController = navController, viewModel = viewModel)
         }
 
 // For EntryDetail, we need to pass a parameter
