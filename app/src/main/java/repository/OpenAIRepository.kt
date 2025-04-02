@@ -21,43 +21,65 @@ class OpenAIRepository : AIAnalysisRepository {
                 OpenAIRequest.Message(
                     role = "system",
                     content = "You are an AI assistant that analyzes journal entries. " +
-                            "Provide sentiment analysis, identify emotions, and give supportive feedback."
+                            "Provide sentiment analysis, identify emotions, and give supportive feedback. " +
+                            "Your responses must be in valid JSON format only."
                 ),
                 OpenAIRequest.Message(
                     role = "user",
-                    content = "Analyze this journal entry and provide: " +
-                            "1. A sentiment score from -1.0 (very negative) to 1.0 (very positive), " +
-                            "2. The main emotions expressed (joy, sadness, anxiety, etc.), and " +
-                            "3. Brief supportive feedback. " +
-                            "Format as JSON with fields 'sentiment', 'emotions', and 'feedback'. " +
+                    content = "Analyze this journal entry and provide your response in this exact JSON format:\n" +
+                            "{\n" +
+                            "  \"sentiment\": (a number from -1.0 to 1.0),\n" +
+                            "  \"emotions\": {\n" +
+                            "    \"emotion1\": (score between 0.0-1.0),\n" +
+                            "    \"emotion2\": (score between 0.0-1.0)\n" +
+                            "  },\n" +
+                            "  \"feedback\": \"Your supportive feedback here\"\n" +
+                            "}\n\n" +
                             "Here's the entry: ${journalEntry.content}"
                 )
             )
 
             val request = OpenAIRequest(messages = messages)
 
-            println("About to call OpenAI API with entry: ${journalEntry.id}")            // Make the API call
-            val response = OpenAIClient.service.createChatCompletion(
-                authorization = OpenAIClient.getAuthHeader(),
-                request = request
-            )
-            println("OpenAI API response status: ${response.isSuccessful}")
-            if (response.isSuccessful) {
-                val responseBody = response.body()
-                val aiContent = responseBody?.choices?.firstOrNull()?.message?.content ?: ""
-
-                // For now, create a simple AIAnalysis object
-                // The actual parsing will happen in the SentimentAnalysisService
-                return AIAnalysis(
-                    entryId = journalEntry.id,
-                    sentiment = 0.0,
-                    emotions = emptyMap(),
-                    feedback = aiContent
+            println("About to call OpenAI API with entry: ${journalEntry.id}")
+            println("Request details: model=${request.model}, temp=${request.temperature}, max_tokens=${request.max_tokens}")
+            
+            try {
+                println("Making API call...")
+                val response = OpenAIClient.service.createChatCompletion(
+                    authorization = OpenAIClient.getAuthHeader(),
+                    request = request
                 )
-            } else {
-                throw Exception("API call failed: ${response.errorBody()?.string()}")
+                println("OpenAI API call completed")
+                println("OpenAI API response status: ${response.isSuccessful}")
+                
+                if (response.isSuccessful) {
+                    val responseBody = response.body()
+                    println("Response body: $responseBody")
+                    val aiContent = responseBody?.choices?.firstOrNull()?.message?.content ?: ""
+                    println("AI content: $aiContent")
+
+                    // For now, create a simple AIAnalysis object
+                    // The actual parsing will happen in the SentimentAnalysisService
+                    return AIAnalysis(
+                        entryId = journalEntry.id,
+                        sentiment = 0.0,
+                        emotions = emptyMap(),
+                        feedback = aiContent
+                    )
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                    println("API call failed with error: $errorBody")
+                    throw Exception("API call failed: $errorBody")
+                }
+            } catch (e: Exception) {
+                println("Exception during API call: ${e.javaClass.simpleName}: ${e.message}")
+                e.printStackTrace()
+                throw Exception("Error analyzing journal entry: ${e.message}")
             }
         } catch (e: Exception) {
+            println("Exception in analyzeJournalEntry: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
             throw Exception("Error analyzing journal entry: ${e.message}")
         }
     }

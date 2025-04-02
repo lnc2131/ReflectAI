@@ -35,12 +35,15 @@ class SentimentAnalysisService(
     private suspend fun parseAIResponse(aiResponse: String, entryId: String): AIAnalysis {
         return withContext(Dispatchers.IO) {
             try {
+                println("Parsing AI response: $aiResponse")
+                
                 // Look for JSON in the response
                 val jsonStart = aiResponse.indexOf('{')
                 val jsonEnd = aiResponse.lastIndexOf('}')
 
                 if (jsonStart >= 0 && jsonEnd > jsonStart) {
                     val jsonString = aiResponse.substring(jsonStart, jsonEnd + 1)
+                    println("Extracted JSON: $jsonString")
                     val jsonElement = JsonParser.parseString(jsonString)
 
                     if (jsonElement.isJsonObject) {

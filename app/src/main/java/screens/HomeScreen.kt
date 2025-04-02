@@ -51,6 +51,23 @@ fun HomeScreen(navController: NavController) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Add TestAPI button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = { navController.navigate(Screen.TestAPI.route) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    )
+                ) {
+                    Text("Test OpenAI API")
+                }
+            }
+            
             // Month navigation
             MonthNavigator(
                 currentMonth = currentMonth,

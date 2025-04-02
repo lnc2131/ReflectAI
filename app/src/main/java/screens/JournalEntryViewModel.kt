@@ -39,18 +39,36 @@ class JournalEntryViewModel(
             // Update the entry with the generated ID if needed
             val updatedEntry = if (entry.id != entryId) entry.copy(id = entryId) else entry
 
-            // Analyze the entry with OpenAI
-            val result = sentimentAnalysisService.analyzeEntry(updatedEntry)
-
-            // Update the UI with the analysis result
-            _analysis.value = result
+            try {
+                // Analyze the entry with OpenAI
+                println("Starting analysis for entry: ${updatedEntry.id}")
+                val result = sentimentAnalysisService.analyzeEntry(updatedEntry)
+                println("Analysis completed successfully")
+                
+                // Update the UI with the analysis result
+                _analysis.value = result
+            } catch (e: Exception) {
+                println("Error during analysis: ${e.javaClass.simpleName}: ${e.message}")
+                e.printStackTrace()
+                
+                // Still provide a result even if analysis fails
+                _analysis.value = AIAnalysis(
+                    entryId = updatedEntry.id,
+                    sentiment = 0.0,
+                    emotions = emptyMap(),
+                    feedback = "Sorry, we couldn't analyze your entry at this time. Your journal entry has been saved."
+                )
+            }
         } catch (e: Exception) {
-            // Handle errors (in a real app, you'd want better error handling)
+            println("Error saving entry: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
+            
+            // Handle errors
             _analysis.value = AIAnalysis(
                 entryId = entry.id,
                 sentiment = 0.0,
                 emotions = emptyMap(),
-                feedback = "Error: ${e.message}"
+                feedback = "Error: Unable to save your journal entry. Please try again."
             )
         }
     }

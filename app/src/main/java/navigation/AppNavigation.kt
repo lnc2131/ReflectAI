@@ -10,6 +10,7 @@ import screens.HomeScreen
 import androidx.compose.runtime.remember
 import screens.JournalEntryViewModel
 import screens.JournalEntryScreen
+import screens.TestAPIScreen
 
 
 
@@ -25,6 +26,7 @@ sealed class Screen(val route: String) {
         fun createRoute(entryId: String) = "entry_detail/$entryId"
     }
     object Settings : Screen("settings")
+    object TestAPI : Screen("test_api")
 }
 
 @Composable
@@ -72,6 +74,10 @@ fun AppNavigation(
         composable(Screen.Settings.route) {
             // SettingsScreen will be created later
             // SettingsScreen(navController)
+        }
+
+        composable(Screen.TestAPI.route) {
+            TestAPIScreen(onBackClick = { navController.navigateUp() })
         }
     }
 }
