@@ -20,22 +20,11 @@ class OpenAIRepository : AIAnalysisRepository {
             val messages = listOf(
                 OpenAIRequest.Message(
                     role = "system",
-                    content = "You are an AI assistant that analyzes journal entries. " +
-                            "Provide sentiment analysis, identify emotions, and give supportive feedback. " +
-                            "Your responses must be in valid JSON format only."
+                    content = "You are an AI assistant that analyzes journal entries.Provide sentiment analysis and supportive feedback."
                 ),
                 OpenAIRequest.Message(
                     role = "user",
-                    content = "Analyze this journal entry and provide your response in this exact JSON format:\n" +
-                            "{\n" +
-                            "  \"sentiment\": (a number from -1.0 to 1.0),\n" +
-                            "  \"emotions\": {\n" +
-                            "    \"emotion1\": (score between 0.0-1.0),\n" +
-                            "    \"emotion2\": (score between 0.0-1.0)\n" +
-                            "  },\n" +
-                            "  \"feedback\": \"Your supportive feedback here\"\n" +
-                            "}\n\n" +
-                            "Here's the entry: ${journalEntry.content}"
+                    content = "Analyze this journal entry: ${journalEntry.content}"
                 )
             )
 

@@ -58,7 +58,8 @@ fun AppNavigation(
 
         composable(Screen.NewEntry.route) {
             val viewModel = remember { JournalEntryViewModel() }
-            JournalEntryScreen(navController = navController, viewModel = viewModel)
+            JournalEntryScreen(viewModel = viewModel,
+                onBackClick = {navController.navigateUp()})
         }
 
 // For EntryDetail, we need to pass a parameter

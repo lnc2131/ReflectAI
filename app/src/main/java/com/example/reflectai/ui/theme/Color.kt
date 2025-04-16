@@ -2,10 +2,14 @@ package com.example.reflectai.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Black and white palette with subtle grays
+val Black = Color(0xFF000000)
+val White = Color(0xFFFFFFFF)
+val LightGray = Color(0xFFF5F5F5)
+val MediumGray = Color(0xFFE0E0E0)
+val DarkGray = Color(0xFF757575)
+val AccentGray = Color(0xFF212121)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Accent colors (very minimal usage)
+val AccentLight = Color(0xFFEEEEEE)
+val AccentDark = Color(0xFF424242)

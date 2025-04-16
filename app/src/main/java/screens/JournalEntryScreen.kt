@@ -1,10 +1,16 @@
 package screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
@@ -14,124 +20,214 @@ import java.util.UUID
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JournalEntryScreen(
-    navController: NavController,
-    viewModel: JournalEntryViewModel
+    viewModel: JournalEntryViewModel,
+    onBackClick: () -> Unit = {}
 ) {
-    val scope = rememberCoroutineScope()
-    var entryTitle by remember { mutableStateOf("") }
-    var entryContent by remember { mutableStateOf("") }
-    var isAnalyzing by remember { mutableStateOf(false) }
-    val analysis by viewModel.analysis.collectAsState()
+    var title by remember { mutableStateOf("") }
+    var content by remember { mutableStateOf("") }
 
-    // Add state for API test result
-    var apiTestMessage by remember { mutableStateOf("") }
+    val isLoading by viewModel.isLoading.collectAsState()
+    val responseText by viewModel.responseText.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val saveSuccess by viewModel.saveSuccess.collectAsState()
+
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New Journal Entry") },
+                title = { Text(
+                    "New Entry", 
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Light
+                    )
+                ) },
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        // You can add an icon here if you want
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowBack,
+                            contentDescription = "Go Back"
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+                )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             modifier = Modifier
-                .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Add the test button at the top
-            Button(
-                onClick = {
-                    viewModel.testApiKey()
-                    apiTestMessage = "Check Logcat for API key details"
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Test API Key")
-            }
-
-            // Show test message if available
-            if (apiTestMessage.isNotEmpty()) {
-                Text(
-                    text = apiTestMessage,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
+            // Title input with minimal styling
             OutlinedTextField(
-                value = entryTitle,
-                onValueChange = { entryTitle = it },
+                value = title,
+                onValueChange = { title = it },
                 label = { Text("Title") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(4.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    focusedLabelColor = MaterialTheme.colorScheme.primary
+                ),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = FontWeight.Light
+                )
             )
 
+            // Content input with minimal styling
             OutlinedTextField(
-                value = entryContent,
-                onValueChange = { entryContent = it },
+                value = content,
+                onValueChange = { content = it },
                 label = { Text("What's on your mind today?") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
+                shape = RoundedCornerShape(4.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    focusedLabelColor = MaterialTheme.colorScheme.primary
+                ),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = FontWeight.Light
+                ),
                 minLines = 5
             )
 
-            Button(
-                onClick = {
-                    if (entryContent.isNotBlank()) {
-                        val entry = JournalEntry(
-                            id = UUID.randomUUID().toString(),
-                            userId = "testUser", // Replace with actual user ID in real app
-                            title = entryTitle,
-                            content = entryContent
-                        )
-                        isAnalyzing = true
-                        scope.launch {
-                            viewModel.saveAndAnalyzeEntry(entry)
-                            isAnalyzing = false
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
+            // Button row with minimalist design
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Save & Analyze")
+                // Save without analysis - outlined button
+                OutlinedButton(
+                    onClick = {
+                        if (content.isNotBlank()) {
+                            scope.launch {
+                                viewModel.saveWithoutAnalysis(title, content)
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isLoading && content.isNotBlank(),
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onBackground
+                    )
+                ) {
+                    Text("Save Only")
+                }
+
+                // Analyze & Save - filled button 
+                Button(
+                    onClick = {
+                        if (content.isNotBlank()) {
+                            scope.launch {
+                                viewModel.processJournalEntry(title, content)
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isLoading && content.isNotBlank(),
+                    shape = RoundedCornerShape(4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Text(if (isLoading) "Processing..." else "Analyze & Save")
+                }
             }
 
-            // Show loading indicator while analyzing
-            if (isAnalyzing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+            // Loading indicator - thin line
+            if (isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(1.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                 )
             }
 
-            // Display analysis results if available
-            analysis?.let { result ->
+            // Error message with minimalist styling
+            if (errorMessage.isNotEmpty()) {
                 Card(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                ) {
+                    Text(
+                        text = errorMessage,
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            // Success message with minimalist styling
+            if (saveSuccess) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                ) {
+                    Text(
+                        text = "Entry saved successfully!",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            // AI Response display with minimalist styling
+            if (responseText.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
                 ) {
                     Column(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth()
+                        modifier = Modifier.padding(20.dp)
                     ) {
                         Text(
                             text = "AI Analysis",
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Sentiment: ${result.sentiment}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Feedback: ${result.feedback}",
-                            style = MaterialTheme.typography.bodyMedium
+                            text = responseText,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Light
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 }
