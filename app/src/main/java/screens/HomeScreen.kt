@@ -25,32 +25,134 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.reflectai.ui.theme.Black
-import com.example.reflectai.ui.theme.DarkGray
-import com.example.reflectai.ui.theme.LightGray
-import com.example.reflectai.ui.theme.MediumGray
-import com.example.reflectai.ui.theme.White
+import androidx.navigation.NavDestination
+import com.example.reflectai.ui.theme.*
+import model.JournalEntry
 import navigation.Screen
+import repository.FirebaseJournalRepository
+import repository.SimpleJournalRepository
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController) {
     // Current date state
     var currentMonth by remember { mutableStateOf(YearMonth.now()) }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    
+    // Repository for checking date entries
+    val repository = remember { SimpleJournalRepository() }
+    
+    // Map of dates with entries
+    var datesWithEntries by remember { mutableStateOf(mapOf<LocalDate, Boolean>()) }
+    
+    // Coroutine scope for repository calls
+    val scope = rememberCoroutineScope()
+    
+    // Get window size info for responsive layout
+    val windowInfo = rememberWindowInfo()
+    val showSidebar = windowInfo.shouldShowSidebar
+    
+    // Key to force reload when the screen is opened 
+    var reloadKey by remember { mutableStateOf(0) }
+    
+    // Force refresh on first display
+    LaunchedEffect(Unit) {
+        reloadKey++
+        println("Initial load of HomeScreen, forcing refresh")
+    }
+    
+    // Refresh when screen gains focus
+    DisposableEffect(Unit) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+            if (destination.route == Screen.Home.route) {
+                // Increment reload key to force LaunchedEffect to run again
+                reloadKey++
+                println("Returned to HomeScreen, forcing refresh with key=$reloadKey")
+                
+                // Clear and rebuild the dates map
+                datesWithEntries = emptyMap()
+            }
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose {
+            navController.removeOnDestinationChangedListener(listener)
+        }
+    }
+    
+    // Load entries for the current month
+    LaunchedEffect(currentMonth, reloadKey) {
+        val firstDay = currentMonth.atDay(1)
+        val lastDay = currentMonth.atEndOfMonth()
+        
+        // Build a map of dates with entries
+        val dateMap = mutableMapOf<LocalDate, Boolean>()
+        
+        // Get all entries for this user
+        repository.getEntries(
+            userId = "testUser",
+            onSuccess = { entries ->
+                println("Found ${entries.size} total entries")
+                
+                // Check each entry's date
+                entries.forEach { entry ->
+                    try {
+                        println("Processing entry: ID=${entry.id}, date=${entry.date}")
+                        val entryDate = JournalEntry.toDate(entry.date)
+                        // If this entry is in the current month
+                        if (entryDate.month == currentMonth.month && 
+                            entryDate.year == currentMonth.year) {
+                            dateMap[entryDate] = true
+                            println("Adding date ${entryDate} to highlighted dates")
+                        } else {
+                            println("Entry date ${entryDate} is not in current month ${currentMonth}")
+                        }
+                    } catch (e: Exception) {
+                        println("Error parsing date ${entry.date}: ${e.message}")
+                    }
+                }
+                
+                // Update the state
+                datesWithEntries = dateMap
+                println("Updated dates with entries: ${dateMap.keys}")
+            },
+            onError = { error ->
+                println("Error getting entries: ${error.message}")
+            }
+        )
+    }
+    
+    // Function to handle date selection
+    val onDateSelected = { date: LocalDate ->
+        selectedDate = date
+        val formattedDate = JournalEntry.fromDate(date)
+        if (datesWithEntries.containsKey(date)) {
+            // Navigate to existing entry for this date
+            navController.navigate(Screen.EntryForDate.createRoute(formattedDate))
+        } else {
+            // Create new entry for this date
+            navController.navigate(Screen.NewEntryWithDate.createRoute(formattedDate))
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
-                    Text(
-                        "ReflectAI", 
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Light
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "ReflectAI", 
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    ) 
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -60,7 +162,10 @@ fun HomeScreen(navController: NavController) {
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { navController.navigate(Screen.NewEntry.route) },
+                onClick = { 
+                    val formattedDate = JournalEntry.fromDate(selectedDate)
+                    navController.navigate(Screen.NewEntryWithDate.createRoute(formattedDate))
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape,
@@ -74,53 +179,127 @@ fun HomeScreen(navController: NavController) {
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-        ) {
-            // Add TestAPI button with minimalist style
+        // When on a tablet in landscape mode, show the sidebar
+        if (showSidebar) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
-                OutlinedButton(
-                    onClick = { navController.navigate(Screen.TestAPI.route) },
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    shape = RoundedCornerShape(4.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onBackground
-                    ),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                // Left sidebar with weeks
+                WeekSidebar(
+                    currentDate = selectedDate,
+                    currentMonth = currentMonth,
+                    datesWithEntries = datesWithEntries,
+                    onDateSelected = onDateSelected,
+                    modifier = Modifier.fillMaxHeight()
+                )
+                
+                // Divider between sidebar and main content
+                Divider(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(1.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+                
+                // Main content area
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
                 ) {
-                    Text(
-                        "Test API",
-                        style = MaterialTheme.typography.labelMedium
+                    // Test API button
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        OutlinedButton(
+                            onClick = { navController.navigate(Screen.TestAPI.route) },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            shape = RoundedCornerShape(4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onBackground
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                "Test API",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Month navigation
+                    MonthNavigator(
+                        currentMonth = currentMonth,
+                        onPreviousMonth = { currentMonth = currentMonth.minusMonths(1) },
+                        onNextMonth = { currentMonth = currentMonth.plusMonths(1) }
+                    )
+    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Calendar grid - now larger
+                    CalendarGrid(
+                        currentMonth = currentMonth,
+                        datesWithEntries = datesWithEntries,
+                        onDateClick = onDateSelected
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Month navigation
-            MonthNavigator(
-                currentMonth = currentMonth,
-                onPreviousMonth = { currentMonth = currentMonth.minusMonths(1) },
-                onNextMonth = { currentMonth = currentMonth.plusMonths(1) }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Calendar grid - now larger
-            CalendarGrid(
-                currentMonth = currentMonth,
-                onDateClick = { date ->
-                    navController.navigate(Screen.NewEntry.route)
+        } else {
+            // Phone layout - just the calendar
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp)
+            ) {
+                // Test API button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(
+                        onClick = { navController.navigate(Screen.TestAPI.route) },
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        shape = RoundedCornerShape(4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onBackground
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            "Test API",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
                 }
-            )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Month navigation
+                MonthNavigator(
+                    currentMonth = currentMonth,
+                    onPreviousMonth = { currentMonth = currentMonth.minusMonths(1) },
+                    onNextMonth = { currentMonth = currentMonth.plusMonths(1) }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Calendar grid - now larger
+                CalendarGrid(
+                    currentMonth = currentMonth,
+                    datesWithEntries = datesWithEntries,
+                    onDateClick = onDateSelected
+                )
+            }
         }
     }
 }
@@ -170,6 +349,7 @@ fun MonthNavigator(
 @Composable
 fun CalendarGrid(
     currentMonth: YearMonth,
+    datesWithEntries: Map<LocalDate, Boolean>,
     onDateClick: (LocalDate) -> Unit
 ) {
     // These will be the day headers (S, M, T, W, T, F, S)
@@ -226,6 +406,7 @@ fun CalendarGrid(
             items(allDays) { date ->
                 CalendarDay(
                     date = date,
+                    hasEntry = date != null && datesWithEntries.containsKey(date),
                     onDateClick = onDateClick
                 )
             }
@@ -236,6 +417,7 @@ fun CalendarGrid(
 @Composable
 fun CalendarDay(
     date: LocalDate?,
+    hasEntry: Boolean,
     onDateClick: (LocalDate) -> Unit
 ) {
     // Identify today's date
@@ -262,7 +444,7 @@ fun CalendarDay(
                             .clip(CircleShape)
                             .border(
                                 width = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                color = if (hasEntry) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                                 shape = CircleShape
                             )
                             .clickable { onDateClick(date) }
@@ -274,13 +456,30 @@ fun CalendarDay(
         contentAlignment = Alignment.Center
     ) {
         date?.let {
-            Text(
-                text = it.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = if (isToday) FontWeight.Medium else FontWeight.Light
-                ),
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = it.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (isToday || hasEntry) FontWeight.Medium else FontWeight.Light
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                
+                // Show indicator dot for days with entries
+                if (hasEntry) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(4.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape
+                            )
+                    )
+                }
+            }
         }
     }
 }

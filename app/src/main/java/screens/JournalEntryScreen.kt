@@ -15,13 +15,18 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import model.JournalEntry
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JournalEntryScreen(
     viewModel: JournalEntryViewModel,
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    initialDate: String = "",
+    entryId: String = "",
+    isExistingEntry: Boolean = false
 ) {
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
@@ -30,18 +35,69 @@ fun JournalEntryScreen(
     val responseText by viewModel.responseText.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val saveSuccess by viewModel.saveSuccess.collectAsState()
+    
+    // Get the entry if we're loading an existing one
+    val entry by viewModel.entry.collectAsState()
+    
+    // Format date for display
+    val displayDate = if (initialDate.isNotEmpty()) {
+        try {
+            println("Formatting initialDate for display: $initialDate")
+            val date = LocalDate.parse(initialDate, DateTimeFormatter.ISO_LOCAL_DATE)
+            val formatted = date.format(DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy"))
+            println("Formatted date for display: $formatted")
+            formatted
+        } catch (e: Exception) {
+            println("Error formatting date for display: ${e.message}")
+            initialDate // Fallback to showing the raw date string
+        }
+    } else {
+        "New Entry"
+    }
+    
+    // Effect to load entry when screen appears
+    LaunchedEffect(initialDate, entryId) {
+        if (isExistingEntry) {
+            if (initialDate.isNotEmpty()) {
+                viewModel.loadEntryByDate(initialDate)
+            } else if (entryId.isNotEmpty()) {
+                viewModel.loadEntryById(entryId)
+            }
+        }
+    }
+    
+    // Update UI when entry changes
+    LaunchedEffect(entry) {
+        entry?.let {
+            title = it.title
+            content = it.content
+        }
+    }
 
     val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(
-                    "New Entry", 
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Light
-                    )
-                ) },
+                title = { 
+                    Column {
+                        Text(
+                            text = if (isExistingEntry) "Journal Entry" else "New Entry", 
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Light
+                            )
+                        )
+                        if (displayDate.isNotEmpty() && displayDate != "New Entry") {
+                            Text(
+                                text = displayDate,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontWeight = FontWeight.Light
+                                ),
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(

@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import screens.JournalEntryViewModel
 import screens.JournalEntryScreen
 import screens.TestAPIScreen
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 
 
@@ -22,9 +24,22 @@ sealed class Screen(val route: String) {
 
     object Home : Screen("home")
     object NewEntry : Screen("new_entry")
+    
+    // Entry with date parameter for creating entries on specific dates
+    object NewEntryWithDate : Screen("new_entry/{date}") {
+        fun createRoute(date: String) = "new_entry/$date"
+    }
+    
+    // View/edit entry for a specific date
+    object EntryForDate : Screen("entry_for_date/{date}") {
+        fun createRoute(date: String) = "entry_for_date/$date"
+    }
+    
+    // Detail view for a specific entry by ID
     object EntryDetail : Screen("entry_detail/{entryId}") {
         fun createRoute(entryId: String) = "entry_detail/$entryId"
     }
+    
     object Settings : Screen("settings")
     object TestAPI : Screen("test_api")
 }
@@ -57,19 +72,59 @@ fun AppNavigation(
         }
 
         composable(Screen.NewEntry.route) {
-            val viewModel = remember { JournalEntryViewModel() }
-            JournalEntryScreen(viewModel = viewModel,
-                onBackClick = {navController.navigateUp()})
+            // Today's date as default
+            val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val viewModel = remember { JournalEntryViewModel(initialDate = today) }
+            JournalEntryScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.navigateUp() },
+                initialDate = today
+            )
+        }
+        
+        // New entry with specific date
+        composable(
+            route = Screen.NewEntryWithDate.route,
+            arguments = listOf(navArgument("date") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val dateString = backStackEntry.arguments?.getString("date") ?: ""
+            val viewModel = remember { JournalEntryViewModel(initialDate = dateString) }
+            JournalEntryScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.navigateUp() },
+                initialDate = dateString
+            )
+        }
+        
+        // View/edit entry for a specific date
+        composable(
+            route = Screen.EntryForDate.route,
+            arguments = listOf(navArgument("date") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val dateString = backStackEntry.arguments?.getString("date") ?: ""
+            println("EntryForDate route: dateString=$dateString")
+            val viewModel = remember { JournalEntryViewModel(initialDate = dateString) }
+            JournalEntryScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.navigateUp() },
+                initialDate = dateString,
+                isExistingEntry = true
+            )
         }
 
-// For EntryDetail, we need to pass a parameter
+        // For EntryDetail, we need to pass a parameter
         composable(
             route = Screen.EntryDetail.route,
             arguments = listOf(navArgument("entryId") { type = NavType.StringType })
         ) { backStackEntry ->
             val entryId = backStackEntry.arguments?.getString("entryId") ?: ""
-            // EntryDetailScreen will be created later
-            // EntryDetailScreen(navController, entryId)
+            val viewModel = remember { JournalEntryViewModel(entryId = entryId) }
+            JournalEntryScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.navigateUp() },
+                entryId = entryId,
+                isExistingEntry = true
+            )
         }
 
         composable(Screen.Settings.route) {
