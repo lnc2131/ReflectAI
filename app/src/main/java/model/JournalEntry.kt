@@ -7,9 +7,9 @@ import java.time.format.DateTimeFormatter
 data class JournalEntry(
     val id: String = "",
     val userId: String = "testUser", // Will be replaced with authentication user ID
-    val title: String = "",
     val content: String = "",
     val aiAnalysis: String = "",
+    val mood: String = "neutral", // Can be "sad", "neutral", or "happy"
     val date: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
     val timestamp: Long = System.currentTimeMillis()
 ) {

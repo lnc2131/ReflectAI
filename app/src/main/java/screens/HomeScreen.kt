@@ -24,10 +24,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import com.example.reflectai.ui.theme.*
 import model.JournalEntry
+import model.MoodCounts
+import model.User
 import navigation.Screen
 import repository.FirebaseJournalRepository
 import repository.SimpleJournalRepository
@@ -35,6 +38,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
+import com.google.firebase.database.FirebaseDatabase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,8 +50,16 @@ fun HomeScreen(navController: NavController) {
     // Repository for checking date entries
     val repository = remember { SimpleJournalRepository() }
     
+    // Firebase database for user mood counts
+    val database = remember { FirebaseDatabase.getInstance() }
+    val usersRef = remember { database.getReference("users") }
+    
     // Map of dates with entries
     var datesWithEntries by remember { mutableStateOf(mapOf<LocalDate, Boolean>()) }
+    
+    // User mood counts
+    var moodCounts by remember { mutableStateOf(MoodCounts()) }
+    var isLoadingMoodCounts by remember { mutableStateOf(true) }
     
     // Coroutine scope for repository calls
     val scope = rememberCoroutineScope()
@@ -63,6 +75,31 @@ fun HomeScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         reloadKey++
         println("Initial load of HomeScreen, forcing refresh")
+    }
+    
+    // Load mood counts
+    LaunchedEffect(reloadKey) {
+        val userId = "testUser"
+        usersRef.child(userId).child("moodCounts").get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.exists()) {
+                    // Manual mapping since Firebase might not deserialize properly
+                    val happy = snapshot.child("happy").getValue(Int::class.java) ?: 0
+                    val neutral = snapshot.child("neutral").getValue(Int::class.java) ?: 0
+                    val sad = snapshot.child("sad").getValue(Int::class.java) ?: 0
+                    
+                    moodCounts = MoodCounts(happy = happy, neutral = neutral, sad = sad)
+                    println("Loaded mood counts: happy=$happy, neutral=$neutral, sad=$sad")
+                } else {
+                    moodCounts = MoodCounts()
+                    println("No mood counts found in Firebase")
+                }
+                isLoadingMoodCounts = false
+            }
+            .addOnFailureListener { error ->
+                println("Error loading mood counts: ${error.message}")
+                isLoadingMoodCounts = false
+            }
     }
     
     // Refresh when screen gains focus
@@ -243,11 +280,13 @@ fun HomeScreen(navController: NavController) {
     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Calendar grid - now larger
+                    // Calendar grid with mood stats
                     CalendarGrid(
                         currentMonth = currentMonth,
                         datesWithEntries = datesWithEntries,
-                        onDateClick = onDateSelected
+                        onDateClick = onDateSelected,
+                        moodCounts = moodCounts,
+                        isLoadingMoodCounts = isLoadingMoodCounts
                     )
                 }
             }
@@ -293,11 +332,13 @@ fun HomeScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Calendar grid - now larger
+                // Calendar grid with mood stats
                 CalendarGrid(
                     currentMonth = currentMonth,
                     datesWithEntries = datesWithEntries,
-                    onDateClick = onDateSelected
+                    onDateClick = onDateSelected,
+                    moodCounts = moodCounts,
+                    isLoadingMoodCounts = isLoadingMoodCounts
                 )
             }
         }
@@ -350,7 +391,9 @@ fun MonthNavigator(
 fun CalendarGrid(
     currentMonth: YearMonth,
     datesWithEntries: Map<LocalDate, Boolean>,
-    onDateClick: (LocalDate) -> Unit
+    onDateClick: (LocalDate) -> Unit,
+    moodCounts: MoodCounts,
+    isLoadingMoodCounts: Boolean
 ) {
     // These will be the day headers (S, M, T, W, T, F, S)
     val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
@@ -377,12 +420,12 @@ fun CalendarGrid(
             }
         }
 
-        // Calendar days - larger grid
+        // Calendar days - slightly smaller to make room for stats
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(340.dp), // Make calendar bigger
+                .height(280.dp),
             contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -411,6 +454,116 @@ fun CalendarGrid(
                 )
             }
         }
+        
+        // Add mood statistics section
+        Spacer(modifier = Modifier.height(16.dp))
+        MoodStats(moodCounts, isLoadingMoodCounts)
+    }
+}
+
+@Composable
+fun MoodStats(moodCounts: MoodCounts, isLoading: Boolean) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.background
+        ),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Mood Summary",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    // Happy count
+                    MoodCounter(
+                        emoji = "😊",
+                        count = moodCounts.happy,
+                        color = Color(0xFF81C995)
+                    )
+                    
+                    // Neutral count
+                    MoodCounter(
+                        emoji = "😐",
+                        count = moodCounts.neutral,
+                        color = Color(0xFFFDD663)
+                    )
+                    
+                    // Sad count
+                    MoodCounter(
+                        emoji = "😔",
+                        count = moodCounts.sad,
+                        color = Color(0xFFF28B82)
+                    )
+                }
+                
+                // Add total entries count
+                val totalEntries = moodCounts.total()
+                if (totalEntries > 0) {
+                    Text(
+                        text = "Total journal entries: $totalEntries",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    )
+                } else {
+                    Text(
+                        text = "No journal entries yet. Start by adding one!",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MoodCounter(emoji: String, count: Int, color: Color) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = emoji,
+            fontSize = 24.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = color
+        )
     }
 }
 
@@ -423,6 +576,35 @@ fun CalendarDay(
     // Identify today's date
     val today = LocalDate.now()
     val isToday = date == today
+    
+    // Repository to check entry details
+    val repository = remember { SimpleJournalRepository() }
+    var entryMood by remember { mutableStateOf<String?>(null) }
+    
+    // Check for entry mood if this date has an entry
+    LaunchedEffect(date, hasEntry) {
+        if (date != null && hasEntry) {
+            val dateStr = JournalEntry.fromDate(date)
+            repository.getEntriesByDate(
+                dateString = dateStr,
+                userId = "testUser",
+                onSuccess = { entries ->
+                    if (entries.isNotEmpty()) {
+                        entryMood = entries.first().mood
+                    }
+                },
+                onError = { /* ignore errors */ }
+            )
+        }
+    }
+    
+    // Determine the mood color for entry
+    val moodColor = when (entryMood) {
+        "sad" -> Color(0xFFF28B82)  // Red
+        "happy" -> Color(0xFF81C995)  // Green
+        "neutral" -> Color(0xFFFDD663)  // Yellow
+        else -> MaterialTheme.colorScheme.primary
+    }
 
     Box(
         modifier = Modifier
@@ -444,7 +626,7 @@ fun CalendarDay(
                             .clip(CircleShape)
                             .border(
                                 width = 0.5.dp,
-                                color = if (hasEntry) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                color = if (hasEntry) moodColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                                 shape = CircleShape
                             )
                             .clickable { onDateClick(date) }
@@ -467,14 +649,14 @@ fun CalendarDay(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 
-                // Show indicator dot for days with entries
+                // Show indicator dot for days with entries, colored by mood
                 if (hasEntry) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Box(
                         modifier = Modifier
-                            .size(4.dp)
+                            .size(6.dp)
                             .background(
-                                color = MaterialTheme.colorScheme.primary,
+                                color = moodColor,
                                 shape = CircleShape
                             )
                     )

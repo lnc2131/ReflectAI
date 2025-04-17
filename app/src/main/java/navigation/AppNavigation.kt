@@ -78,7 +78,8 @@ fun AppNavigation(
             JournalEntryScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.navigateUp() },
-                initialDate = today
+                initialDate = today,
+                navController = navController
             )
         }
         
@@ -92,7 +93,8 @@ fun AppNavigation(
             JournalEntryScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.navigateUp() },
-                initialDate = dateString
+                initialDate = dateString,
+                navController = navController
             )
         }
         
@@ -108,7 +110,8 @@ fun AppNavigation(
                 viewModel = viewModel,
                 onBackClick = { navController.navigateUp() },
                 initialDate = dateString,
-                isExistingEntry = true
+                isExistingEntry = true,
+                navController = navController
             )
         }
 
@@ -123,7 +126,8 @@ fun AppNavigation(
                 viewModel = viewModel,
                 onBackClick = { navController.navigateUp() },
                 entryId = entryId,
-                isExistingEntry = true
+                isExistingEntry = true,
+                navController = navController
             )
         }
 

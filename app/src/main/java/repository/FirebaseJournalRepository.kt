@@ -4,12 +4,15 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import model.JournalEntry
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import model.JournalEntry
+import model.MoodCounts
+import model.User
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -17,184 +20,213 @@ class FirebaseJournalRepository : JournalRepository {
     // Reference to Firebase database
     private val database = FirebaseDatabase.getInstance()
     private val entriesRef = database.getReference("journal_entries")
-
+    private val usersRef = database.getReference("users")
+    
     // Get all entries for a user
-    override suspend fun getJournalEntries(userId: String): Flow<List<JournalEntry>> = callbackFlow {
-        val entriesQuery = entriesRef.child(userId)
-
-        val listener = entriesQuery.addValueEventListener(object : ValueEventListener {
+    override suspend fun getJournalEntries(userId: String): Flow<List<JournalEntry>> {
+        val entriesFlow = MutableStateFlow<List<JournalEntry>>(emptyList())
+        
+        // Setup real-time listener
+        entriesRef.child(userId).addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val entries = mutableListOf<JournalEntry>()
-                for (childSnapshot in snapshot.children) {
-                    childSnapshot.getValue(JournalEntry::class.java)?.let {
+                for (entrySnapshot in snapshot.children) {
+                    entrySnapshot.getValue(JournalEntry::class.java)?.let {
                         entries.add(it)
                     }
                 }
-                trySend(entries)
+                entriesFlow.value = entries
             }
-
+            
             override fun onCancelled(error: DatabaseError) {
-                close(error.toException())
+                // Handle error
+                println("Error loading entries: ${error.message}")
             }
         })
-
-        // Remove the listener when the Flow is cancelled
-        awaitClose { entriesQuery.removeEventListener(listener) }
+        
+        return entriesFlow
     }
     
     // Get entries for a specific date
-    override suspend fun getJournalEntriesByDate(userId: String, date: LocalDate): List<JournalEntry> = 
-        suspendCancellableCoroutine { continuation ->
-            val dateString = JournalEntry.fromDate(date)
-            
-            // Query entries by date
+    override suspend fun getJournalEntriesByDate(userId: String, date: LocalDate): List<JournalEntry> {
+        val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return suspendCancellableCoroutine { continuation ->
             entriesRef.child(userId)
                 .orderByChild("date")
                 .equalTo(dateString)
-                .get()
-                .addOnSuccessListener { snapshot ->
-                    val entries = mutableListOf<JournalEntry>()
-                    for (entrySnapshot in snapshot.children) {
-                        entrySnapshot.getValue(JournalEntry::class.java)?.let { entry ->
-                            entries.add(entry)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val entries = mutableListOf<JournalEntry>()
+                        for (entrySnapshot in snapshot.children) {
+                            entrySnapshot.getValue(JournalEntry::class.java)?.let {
+                                entries.add(it)
+                            }
                         }
+                        continuation.resume(entries)
                     }
-                    continuation.resume(entries)
-                }
-                .addOnFailureListener {
-                    continuation.resume(emptyList())
-                }
+                    
+                    override fun onCancelled(error: DatabaseError) {
+                        continuation.resumeWithException(error.toException())
+                    }
+                })
         }
+    }
     
-    // Check if an entry exists for a specific date
-    override suspend fun hasEntryForDate(userId: String, date: LocalDate): Boolean =
-        suspendCancellableCoroutine { continuation ->
-            val dateString = JournalEntry.fromDate(date)
-            
+    // Check if entry exists for a date
+    override suspend fun hasEntryForDate(userId: String, date: LocalDate): Boolean {
+        val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return suspendCancellableCoroutine { continuation ->
             entriesRef.child(userId)
                 .orderByChild("date")
                 .equalTo(dateString)
                 .limitToFirst(1)
-                .get()
-                .addOnSuccessListener { snapshot ->
-                    continuation.resume(snapshot.exists() && snapshot.childrenCount > 0)
-                }
-                .addOnFailureListener {
-                    continuation.resume(false)
-                }
-        }
-        
-    // Get entry by ID
-    override suspend fun getJournalEntryById(entryId: String): JournalEntry? = suspendCancellableCoroutine { continuation ->
-        // We need to find which user owns this entry
-        entriesRef.get().addOnSuccessListener { usersSnapshot ->
-            var foundEntry: JournalEntry? = null
-
-            // Loop through all users
-            for (userSnapshot in usersSnapshot.children) {
-                val userId = userSnapshot.key
-                if (userId != null) {
-                    // For each user, check if they have the entry we're looking for
-                    entriesRef.child(userId).child(entryId).get().addOnSuccessListener { entrySnapshot ->
-                        if (entrySnapshot.exists()) {
-                            foundEntry = entrySnapshot.getValue(JournalEntry::class.java)
-                        }
-
-                        // Whether we found it or not, resolve the coroutine
-                        continuation.resume(foundEntry)
-                    }.addOnFailureListener {
-                        continuation.resume(null)
+                .addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val hasEntry = snapshot.exists() && snapshot.childrenCount > 0
+                        continuation.resume(hasEntry)
                     }
-
-                    // We've started the search, so return from the loop
-                    return@addOnSuccessListener
-                }
-            }
-
-            // If we get here, there were no users to search
-            continuation.resume(null)
-        }.addOnFailureListener {
-            continuation.resume(null)
+                    
+                    override fun onCancelled(error: DatabaseError) {
+                        continuation.resumeWithException(error.toException())
+                    }
+                })
         }
     }
     
-    // Add new entry
-    override suspend fun addJournalEntry(entry: JournalEntry): String = suspendCancellableCoroutine { continuation ->
-        // Generate a new ID if one isn't provided
-        val entryId = if (entry.id.isNotEmpty()) entry.id else entriesRef.child(entry.userId).push().key ?: ""
-
-        if (entryId.isEmpty()) {
-            continuation.resumeWithException(Exception("Failed to generate entry ID"))
-            return@suspendCancellableCoroutine
-        }
-
-        // Create an entry with the generated ID
-        val entryWithId = entry.copy(id = entryId)
-
-        // Save the entry to Firebase
-        entriesRef.child(entry.userId).child(entryId).setValue(entryWithId)
-            .addOnSuccessListener {
-                continuation.resume(entryId)
-            }
-            .addOnFailureListener {
-                continuation.resumeWithException(it)
-            }
-    }
-
-    // Update existing entry
-    override suspend fun updateJournalEntry(entry: JournalEntry): Boolean = suspendCancellableCoroutine { continuation ->
-        // Ensure we have a valid ID and userId
-        if (entry.id.isEmpty() || entry.userId.isEmpty()) {
-            continuation.resume(false)
-            return@suspendCancellableCoroutine
-        }
-
-        // Update the entry in Firebase
-        entriesRef.child(entry.userId).child(entry.id).setValue(entry)
-            .addOnSuccessListener {
-                continuation.resume(true)
-            }
-            .addOnFailureListener {
-                continuation.resume(false)
-            }
-    }
-
-    // Delete an entry
-    override suspend fun deleteJournalEntry(entryId: String): Boolean = suspendCancellableCoroutine { continuation ->
-        // We need to find which user this entry belongs to
-        entriesRef.get().addOnSuccessListener { usersSnapshot ->
-            var deleted = false
-
-            for (userSnapshot in usersSnapshot.children) {
-                val userId = userSnapshot.key
-                if (userId != null) {
-                    entriesRef.child(userId).child(entryId).get().addOnSuccessListener { entrySnapshot ->
-                        if (entrySnapshot.exists()) {
-                            // Found the entry, now delete it
-                            entriesRef.child(userId).child(entryId).removeValue()
-                                .addOnSuccessListener {
-                                    // Also delete any associated analysis
-                                    val aiAnalysisRef = database.getReference("ai_analysis")
-                                    aiAnalysisRef.child(entryId).removeValue()
-
-                                    deleted = true
-                                    continuation.resume(true)
-                                }
-                                .addOnFailureListener {
-                                    continuation.resume(false)
-                                }
-                            return@addOnSuccessListener
-                        }
-                    }
+    // Get entry by ID
+    override suspend fun getJournalEntryById(entryId: String): JournalEntry? {
+        val userId = "testUser" // Default user ID
+        return suspendCancellableCoroutine { continuation ->
+            entriesRef.child(userId).child(entryId).get()
+                .addOnSuccessListener { snapshot ->
+                    val entry = snapshot.getValue(JournalEntry::class.java)
+                    continuation.resume(entry)
                 }
-            }
-
-            // If we get here, entry wasn't found
-            if (!deleted) {
-                continuation.resume(false)
-            }
-        }.addOnFailureListener {
-            continuation.resume(false)
+                .addOnFailureListener { error ->
+                    continuation.resumeWithException(error)
+                }
         }
+    }
+    
+    // Add a new entry
+    override suspend fun addJournalEntry(entry: JournalEntry): String {
+        val userId = entry.userId.ifEmpty { "testUser" }
+        val entryId = if (entry.id.isNotEmpty()) {
+            entry.id
+        } else {
+            entriesRef.child(userId).push().key ?: ""
+        }
+        
+        val finalEntry = entry.copy(id = entryId)
+        
+        return suspendCancellableCoroutine { continuation ->
+            entriesRef.child(userId).child(entryId).setValue(finalEntry)
+                .addOnSuccessListener {
+                    // After successful save, update the mood count
+                    updateMoodCount(
+                        userId = userId,
+                        mood = finalEntry.mood,
+                        onSuccess = {
+                            continuation.resume(entryId)
+                        },
+                        onError = { error ->
+                            // Still resume with ID even if mood count fails
+                            println("Warning: Could not update mood count: ${error.message}")
+                            continuation.resume(entryId)
+                        }
+                    )
+                }
+                .addOnFailureListener { error ->
+                    continuation.resumeWithException(error)
+                }
+        }
+    }
+    
+    // Update an existing entry
+    override suspend fun updateJournalEntry(entry: JournalEntry): Boolean {
+        val userId = entry.userId.ifEmpty { "testUser" }
+        val entryId = entry.id
+        
+        if (entryId.isEmpty()) {
+            throw IllegalArgumentException("Entry ID must not be empty for updates")
+        }
+        
+        return suspendCancellableCoroutine { continuation ->
+            entriesRef.child(userId).child(entryId).setValue(entry)
+                .addOnSuccessListener {
+                    continuation.resume(true)
+                }
+                .addOnFailureListener { error ->
+                    continuation.resumeWithException(error)
+                }
+        }
+    }
+    
+    // Delete an entry
+    override suspend fun deleteJournalEntry(entryId: String): Boolean {
+        val userId = "testUser" // Default user ID
+        
+        return suspendCancellableCoroutine { continuation ->
+            entriesRef.child(userId).child(entryId).removeValue()
+                .addOnSuccessListener {
+                    continuation.resume(true)
+                }
+                .addOnFailureListener { error ->
+                    continuation.resumeWithException(error)
+                }
+        }
+    }
+    
+    // Get or create user
+    fun getOrCreateUser(userId: String = "testUser", onSuccess: (User) -> Unit, onError: (Exception) -> Unit) {
+        usersRef.child(userId).get()
+            .addOnSuccessListener { snapshot ->
+                val user = if (snapshot.exists()) {
+                    snapshot.getValue(User::class.java) ?: User(id = userId)
+                } else {
+                    // Create a new user if none exists
+                    val newUser = User(id = userId)
+                    usersRef.child(userId).setValue(newUser)
+                    newUser
+                }
+                onSuccess(user)
+            }
+            .addOnFailureListener { error ->
+                onError(error)
+            }
+    }
+    
+    // Update mood count in Firebase
+    fun updateMoodCount(userId: String = "testUser", mood: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        // First get the current user data
+        getOrCreateUser(
+            userId = userId,
+            onSuccess = { user ->
+                // Update the mood count
+                val updatedCounts = user.moodCounts.incrementMood(mood)
+                
+                // Save back to Firebase
+                usersRef.child(userId).child("moodCounts").setValue(updatedCounts)
+                    .addOnSuccessListener {
+                        onSuccess()
+                    }
+                    .addOnFailureListener { error ->
+                        onError(error)
+                    }
+            },
+            onError = onError
+        )
+    }
+    
+    // Get mood counts for a user
+    fun getMoodCounts(userId: String = "testUser", onSuccess: (MoodCounts) -> Unit, onError: (Exception) -> Unit) {
+        usersRef.child(userId).child("moodCounts").get()
+            .addOnSuccessListener { snapshot ->
+                val moodCounts = snapshot.getValue(MoodCounts::class.java) ?: MoodCounts()
+                onSuccess(moodCounts)
+            }
+            .addOnFailureListener { error ->
+                onError(error)
+            }
     }
 }

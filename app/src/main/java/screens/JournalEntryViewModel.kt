@@ -109,7 +109,7 @@ class JournalEntryViewModel(
                     val foundEntry = entries.first()
                     _entry.value = foundEntry
                     _responseText.value = foundEntry.aiAnalysis
-                    println("Loaded entry: ${foundEntry.id}, title: ${foundEntry.title}")
+                    println("Loaded entry: ${foundEntry.id}, mood: ${foundEntry.mood}")
                 } else {
                     _errorMessage.value = "No entry found for this date"
                     println("No entries found for date: $dateString")
@@ -144,9 +144,24 @@ class JournalEntryViewModel(
             }
         )
     }
+    
+    // Get entry dates for the week sidebar
+    fun getEntryDatesForWeek(startDate: String, endDate: String, onResult: (Map<String, Boolean>) -> Unit) {
+        simpleRepository.getEntryDatesForRange(
+            startDate = startDate,
+            endDate = endDate,
+            onSuccess = { dateMap ->
+                onResult(dateMap)
+            },
+            onError = { error ->
+                println("Error getting entry dates for week: ${error.message}")
+                onResult(emptyMap())
+            }
+        )
+    }
 
     // Process entry and save
-    fun processJournalEntry(title: String, content: String) {
+    fun processJournalEntry(content: String, mood: String = "neutral") {
         _isLoading.value = true
         _errorMessage.value = ""
         _responseText.value = ""
@@ -154,11 +169,15 @@ class JournalEntryViewModel(
 
         viewModelScope.launch {
             try {
-                // Create simple request
+                // Create therapeutic request
                 val messages = listOf(
                     OpenAIRequest.Message(
+                        role = "system",
+                        content = "You are a supportive and empathetic therapist. Respond directly to the journal entry with emotionally supportive words. Be concise but warm. Address the user directly. Validate their feelings and offer gentle perspective. Don't analyze the entry academically - respond as if you're speaking to them in a therapy session."
+                    ),
+                    OpenAIRequest.Message(
                         role = "user",
-                        content = "Analyze this journal entry: $content"
+                        content = content
                     )
                 )
 
@@ -181,9 +200,9 @@ class JournalEntryViewModel(
                     val entry = if (_entry.value != null) {
                         // Update existing entry
                         _entry.value!!.copy(
-                            title = title,
                             content = content,
                             aiAnalysis = aiResponse,
+                            mood = mood,
                             date = date,
                             timestamp = System.currentTimeMillis()
                         )
@@ -191,9 +210,10 @@ class JournalEntryViewModel(
                         // Create new entry
                         JournalEntry(
                             id = currentEntryId ?: "", // Use existing ID or let Firebase generate one
-                            title = title,
+                            userId = "testUser",
                             content = content,
                             aiAnalysis = aiResponse,
+                            mood = mood,
                             date = date,
                             timestamp = System.currentTimeMillis()
                         )
@@ -226,7 +246,7 @@ class JournalEntryViewModel(
     }
 
     // Save without analysis for backup
-    fun saveWithoutAnalysis(title: String, content: String) {
+    fun saveWithoutAnalysis(content: String, mood: String = "neutral") {
         _isLoading.value = true
         _errorMessage.value = ""
         _saveSuccess.value = false
@@ -238,8 +258,8 @@ class JournalEntryViewModel(
         val entry = if (_entry.value != null) {
             // Update existing entry
             _entry.value!!.copy(
-                title = title,
                 content = content,
+                mood = mood,
                 date = date,
                 timestamp = System.currentTimeMillis()
             )
@@ -247,9 +267,10 @@ class JournalEntryViewModel(
             // Create new entry
             JournalEntry(
                 id = currentEntryId ?: "", // Use existing ID or let Firebase generate one
-                title = title,
+                userId = "testUser",
                 content = content,
                 aiAnalysis = "No analysis performed",
+                mood = mood,
                 date = date,
                 timestamp = System.currentTimeMillis()
             )

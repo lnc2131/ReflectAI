@@ -20,11 +20,11 @@ class OpenAIRepository : AIAnalysisRepository {
             val messages = listOf(
                 OpenAIRequest.Message(
                     role = "system",
-                    content = "You are an AI assistant that analyzes journal entries.Provide sentiment analysis and supportive feedback."
+                    content = "You are an AI Therapist that analyzes journal entries.Provide Emotional supportive message."
                 ),
                 OpenAIRequest.Message(
                     role = "user",
-                    content = "Analyze this journal entry: ${journalEntry.content}"
+                    content = "You are an AI Therapist that analyzes journal entries.Provide Emotional supportive message to this ${journalEntry.content}"
                 )
             )
 
