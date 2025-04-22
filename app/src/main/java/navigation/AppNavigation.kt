@@ -10,6 +10,7 @@ import screens.HomeScreen
 import androidx.compose.runtime.remember
 import screens.JournalEntryViewModel
 import screens.JournalEntryScreen
+import screens.LoginScreen
 import screens.TestAPIScreen
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -47,7 +48,7 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    startDestination: String = Screen.Home.route,
+    startDestination: String = Screen.Login.route,
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -58,13 +59,11 @@ fun AppNavigation(
         // Define the navigation graph here
 
         composable(Screen.Login.route) {
-            // LoginScreen will be created later
-            // LoginScreen(navController)
+            LoginScreen(navController)
         }
 
         composable(Screen.SignUp.route) {
-            // SignUpScreen will be created later
-            // SignUpScreen(navController)
+            LoginScreen(navController, isSignUp = true)
         }
         // Main app routes - add these inside the NavHost lambda
         composable(Screen.Home.route) {

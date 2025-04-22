@@ -13,6 +13,7 @@ import model.AIAnalysis
 import model.JournalEntry
 import repository.FirebaseJournalRepository
 import repository.SimpleJournalRepository
+import repository.UserRepository
 import service.SentimentAnalysisService
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -32,8 +33,7 @@ class JournalEntryViewModel(
     private val _errorMessage = MutableStateFlow("")
     val errorMessage: StateFlow<String> = _errorMessage
 
-    private val _saveSuccess = MutableStateFlow(false)
-    val saveSuccess: StateFlow<Boolean> = _saveSuccess
+    // Removed save success state - we'll just handle it via loading state
     
     // Entry state for loading existing entries
     private val _entry = MutableStateFlow<JournalEntry?>(null)
@@ -42,6 +42,7 @@ class JournalEntryViewModel(
     // Repository for Firebase operations
     private val simpleRepository = SimpleJournalRepository()
     private val repository = FirebaseJournalRepository()
+    private val userRepository = UserRepository()
     
     // Current date or entry ID
     private var currentDate: String? = null
@@ -102,7 +103,6 @@ class JournalEntryViewModel(
         // Use simple repository to get entries by date
         simpleRepository.getEntriesByDate(
             dateString = formattedDate,
-            userId = "testUser",
             onSuccess = { entries ->
                 if (entries.isNotEmpty()) {
                     // Use the first entry if multiple exist for the same date
@@ -111,7 +111,8 @@ class JournalEntryViewModel(
                     _responseText.value = foundEntry.aiAnalysis
                     println("Loaded entry: ${foundEntry.id}, mood: ${foundEntry.mood}")
                 } else {
-                    _errorMessage.value = "No entry found for this date"
+                    // Just set entry to null instead of showing error
+                    _entry.value = null
                     println("No entries found for date: $dateString")
                 }
                 _isLoading.value = false
@@ -159,18 +160,63 @@ class JournalEntryViewModel(
             }
         )
     }
+    
+    // Get current user info
+    fun getCurrentUserId(): String {
+        return userRepository.getCurrentUserId()
+    }
+    
+    fun isUserLoggedIn(): Boolean {
+        return userRepository.isUserLoggedIn()
+    }
+    
+    fun signOut(onComplete: () -> Unit) {
+        userRepository.signOut()
+        onComplete()
+    }
 
     // Process entry and save
-    fun processJournalEntry(content: String, mood: String = "neutral") {
+    fun processJournalEntry(content: String, userSelectedMood: String = "neutral") {
         _isLoading.value = true
         _errorMessage.value = ""
         _responseText.value = ""
-        _saveSuccess.value = false
 
         viewModelScope.launch {
             try {
-                // Create therapeutic request
-                val messages = listOf(
+                // First API call - Sentiment analysis
+                val sentimentMessages = listOf(
+                    OpenAIRequest.Message(
+                        role = "system",
+                        content = "Analyze the sentiment of the following journal entry. Respond with ONLY one of these three words: 'happy', 'neutral', or 'sad'. No other text or explanation."
+                    ),
+                    OpenAIRequest.Message(
+                        role = "user",
+                        content = content
+                    )
+                )
+
+                val sentimentRequest = OpenAIRequest(messages = sentimentMessages)
+                val sentimentResponse = OpenAIClient.service.createChatCompletion(
+                    authorization = OpenAIClient.getAuthHeader(),
+                    request = sentimentRequest
+                )
+
+                var mood = userSelectedMood
+                
+                if (sentimentResponse.isSuccessful) {
+                    val sentimentResult = sentimentResponse.body()?.choices?.firstOrNull()?.message?.content?.trim()?.lowercase() ?: "neutral"
+                    // Validate that the response is one of the expected values
+                    mood = when (sentimentResult) {
+                        "happy", "sad", "neutral" -> sentimentResult
+                        else -> "neutral" // Default if unexpected response
+                    }
+                    println("Sentiment analysis result: $mood")
+                } else {
+                    println("Sentiment analysis failed, using user-selected mood: $mood")
+                }
+
+                // Second API call - Get support response
+                val supportMessages = listOf(
                     OpenAIRequest.Message(
                         role = "system",
                         content = "You are a supportive and empathetic therapist. Respond directly to the journal entry with emotionally supportive words. Be concise but warm. Address the user directly. Validate their feelings and offer gentle perspective. Don't analyze the entry academically - respond as if you're speaking to them in a therapy session."
@@ -181,16 +227,14 @@ class JournalEntryViewModel(
                     )
                 )
 
-                val request = OpenAIRequest(messages = messages)
-
-                // Make API call
-                val response = OpenAIClient.service.createChatCompletion(
+                val supportRequest = OpenAIRequest(messages = supportMessages)
+                val supportResponse = OpenAIClient.service.createChatCompletion(
                     authorization = OpenAIClient.getAuthHeader(),
-                    request = request
+                    request = supportRequest
                 )
 
-                if (response.isSuccessful) {
-                    val aiResponse = response.body()?.choices?.firstOrNull()?.message?.content ?: "No response"
+                if (supportResponse.isSuccessful) {
+                    val aiResponse = supportResponse.body()?.choices?.firstOrNull()?.message?.content ?: "No response"
                     _responseText.value = aiResponse
 
                     // Create or update the journal entry
@@ -224,7 +268,6 @@ class JournalEntryViewModel(
                         entry = entry,
                         onSuccess = {
                             _entry.value = entry
-                            _saveSuccess.value = true
                             _isLoading.value = false
                         },
                         onError = { e ->
@@ -233,7 +276,7 @@ class JournalEntryViewModel(
                         }
                     )
                 } else {
-                    val error = response.errorBody()?.string() ?: "Unknown error"
+                    val error = supportResponse.errorBody()?.string() ?: "Unknown error"
                     _errorMessage.value = "API Error: $error"
                     _isLoading.value = false
                 }
@@ -249,7 +292,6 @@ class JournalEntryViewModel(
     fun saveWithoutAnalysis(content: String, mood: String = "neutral") {
         _isLoading.value = true
         _errorMessage.value = ""
-        _saveSuccess.value = false
 
         // Create or update the journal entry
         val date = currentDate ?: LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -280,7 +322,6 @@ class JournalEntryViewModel(
             entry = entry,
             onSuccess = {
                 _entry.value = entry
-                _saveSuccess.value = true
                 _isLoading.value = false
             },
             onError = { e ->

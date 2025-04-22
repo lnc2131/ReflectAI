@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
@@ -34,6 +35,7 @@ import model.User
 import navigation.Screen
 import repository.FirebaseJournalRepository
 import repository.SimpleJournalRepository
+import repository.UserRepository
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -79,7 +81,17 @@ fun HomeScreen(navController: NavController) {
     
     // Load mood counts
     LaunchedEffect(reloadKey) {
-        val userId = "testUser"
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            // If not logged in, navigate to login screen
+            navController.navigate(Screen.Login.route) {
+                popUpTo(Screen.Home.route) { inclusive = true }
+            }
+            return@LaunchedEffect
+        }
+        
         usersRef.child(userId).child("moodCounts").get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.exists()) {
@@ -130,7 +142,6 @@ fun HomeScreen(navController: NavController) {
         
         // Get all entries for this user
         repository.getEntries(
-            userId = "testUser",
             onSuccess = { entries ->
                 println("Found ${entries.size} total entries")
                 
@@ -246,26 +257,58 @@ fun HomeScreen(navController: NavController) {
                         .weight(1f)
                         .padding(horizontal = 16.dp)
                 ) {
-                    // Test API button
+                    // Action buttons
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 8.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        OutlinedButton(
-                            onClick = { navController.navigate(Screen.TestAPI.route) },
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                            shape = RoundedCornerShape(4.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onBackground
-                            ),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                "Test API",
-                                style = MaterialTheme.typography.labelMedium
-                            )
+                        Row {
+                            OutlinedButton(
+                                onClick = { navController.navigate(Screen.TestAPI.route) },
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                shape = RoundedCornerShape(4.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onBackground
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    "Test API",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            // Logout button
+                            val userRepo = remember { UserRepository() }
+                            OutlinedButton(
+                                onClick = {
+                                    userRepo.signOut()
+                                    navController.navigate(Screen.Login.route) {
+                                        popUpTo(Screen.Home.route) { inclusive = true }
+                                    }
+                                },
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
+                                shape = RoundedCornerShape(4.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ExitToApp,
+                                    contentDescription = "Logout",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "Logout",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
                     
@@ -298,26 +341,58 @@ fun HomeScreen(navController: NavController) {
                     .padding(padding)
                     .padding(horizontal = 16.dp)
             ) {
-                // Test API button
+                // Action buttons
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    OutlinedButton(
-                        onClick = { navController.navigate(Screen.TestAPI.route) },
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        shape = RoundedCornerShape(4.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onBackground
-                        ),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            "Test API",
-                            style = MaterialTheme.typography.labelMedium
-                        )
+                    Row {
+                        OutlinedButton(
+                            onClick = { navController.navigate(Screen.TestAPI.route) },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            shape = RoundedCornerShape(4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onBackground
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                "Test API",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        // Logout button
+                        val userRepo = remember { UserRepository() }
+                        OutlinedButton(
+                            onClick = {
+                                userRepo.signOut()
+                                navController.navigate(Screen.Login.route) {
+                                    popUpTo(Screen.Home.route) { inclusive = true }
+                                }
+                            },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
+                            shape = RoundedCornerShape(4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp,
+                                contentDescription = "Logout",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "Logout",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
                     }
                 }
                 
@@ -587,7 +662,6 @@ fun CalendarDay(
             val dateStr = JournalEntry.fromDate(date)
             repository.getEntriesByDate(
                 dateString = dateStr,
-                userId = "testUser",
                 onSuccess = { entries ->
                     if (entries.isNotEmpty()) {
                         entryMood = entries.first().mood

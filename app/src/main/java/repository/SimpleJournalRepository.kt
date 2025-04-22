@@ -14,19 +14,23 @@ class SimpleJournalRepository {
     
     // Save a journal entry directly
     fun saveEntry(entry: JournalEntry, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
-        // Ensure userId is always set
-        val entryWithUserId = if (entry.userId.isEmpty()) {
-            entry.copy(userId = "testUser")  // Use default user ID if none provided
-        } else {
-            entry
+        val userRepo = UserRepository()
+        val currentUserId = userRepo.getCurrentUserId()
+        
+        if (currentUserId.isEmpty()) {
+            onError(IllegalStateException("User must be logged in to save journal entries"))
+            return
         }
+        
+        // Always use the current user's ID
+        val entryWithUserId = entry.copy(userId = currentUserId)
         
         // Generate a reference under the user's ID
         val entryRef = if (entryWithUserId.id.isEmpty()) {
             // Generate a new ID if one isn't provided
-            entriesRef.child(entryWithUserId.userId).push()
+            entriesRef.child(currentUserId).push()
         } else {
-            entriesRef.child(entryWithUserId.userId).child(entryWithUserId.id)
+            entriesRef.child(currentUserId).child(entryWithUserId.id)
         }
 
         // If we generated a new ID, use it
@@ -84,55 +88,83 @@ class SimpleJournalRepository {
         
         println("Updating mood count for user $userId, mood: $mood")
         
-        // First get the current user data and mood counts
-        usersRef.child(userId).get()
-            .addOnSuccessListener { snapshot ->
-                // Get current mood counts or create new ones
-                val currentCount = snapshot.child("moodCounts").child(mood).getValue(Int::class.java) ?: 0
-                
-                // Increment the count for this mood
-                val newCount = currentCount + 1
-                println("Incrementing $mood count from $currentCount to $newCount")
-                
-                // Make sure the user node exists
-                if (!snapshot.exists()) {
+        // First get all entries to calculate accurate mood counts
+        recalculateMoodCounts(userId)
+    }
+    
+    // Recalculate all mood counts based on actual entries
+    private fun recalculateMoodCounts(userId: String) {
+        // Get all entries for this user
+        entriesRef.child(userId).get().addOnSuccessListener { entriesSnapshot ->
+            println("Recalculating mood counts for user $userId")
+            
+            // Initialize counters for each mood
+            val moodCounts = mutableMapOf(
+                "happy" to 0,
+                "neutral" to 0,
+                "sad" to 0
+            )
+            
+            // Map to track which dates we've already processed
+            val processedDates = mutableSetOf<String>()
+            
+            // Process all entries
+            entriesSnapshot.children.forEach { entrySnapshot ->
+                val entry = entrySnapshot.getValue(JournalEntry::class.java)
+                entry?.let {
+                    // Only count each date once
+                    if (!processedDates.contains(it.date)) {
+                        // Add the date to processed set
+                        processedDates.add(it.date)
+                        
+                        // Increment the appropriate mood counter
+                        if (it.mood in moodCounts.keys) {
+                            moodCounts[it.mood] = moodCounts[it.mood]!! + 1
+                            println("Counting entry date=${it.date}, mood=${it.mood}")
+                        }
+                    } else {
+                        println("Skipping duplicate date entry: ${it.date}")
+                    }
+                }
+            }
+            
+            println("Final mood counts after recalculation: $moodCounts")
+            
+            // Make sure the user node exists
+            val userRef = usersRef.child(userId)
+            userRef.get().addOnSuccessListener { userSnapshot ->
+                if (!userSnapshot.exists()) {
                     // Create a basic user entry first
                     val user = mapOf(
                         "id" to userId,
-                        "displayName" to "Test User"
+                        "displayName" to "User"
                     )
-                    usersRef.child(userId).updateChildren(user)
+                    userRef.updateChildren(user)
                 }
                 
-                // Update just this specific mood count
-                usersRef.child(userId).child("moodCounts").child(mood).setValue(newCount)
+                // Update all mood counts at once
+                userRef.child("moodCounts").setValue(moodCounts)
                     .addOnSuccessListener {
-                        println("Successfully updated mood count for $mood to $newCount")
+                        println("Successfully updated all mood counts: $moodCounts")
                     }
                     .addOnFailureListener { error ->
-                        println("Failed to update mood count: ${error.message}")
+                        println("Failed to update mood counts: ${error.message}")
                     }
             }
-            .addOnFailureListener { error ->
-                println("Failed to get user data for mood count update: ${error.message}")
-                
-                // Try to create the user and mood count anyway
-                val updates = HashMap<String, Any>()
-                updates["id"] = userId 
-                updates["moodCounts/$mood"] = 1
-                
-                usersRef.child(userId).updateChildren(updates)
-                    .addOnSuccessListener {
-                        println("Created new user and initialized mood count for $mood")
-                    }
-                    .addOnFailureListener { updateError ->
-                        println("Failed to create user and mood count: ${updateError.message}")
-                    }
-            }
+        }.addOnFailureListener { error ->
+            println("Failed to get entries for mood count calculation: ${error.message}")
+        }
     }
 
     // Get all journal entries for a user
-    fun getEntries(userId: String = "testUser", onSuccess: (List<JournalEntry>) -> Unit, onError: (Exception) -> Unit) {
+    fun getEntries(onSuccess: (List<JournalEntry>) -> Unit, onError: (Exception) -> Unit) {
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            onError(IllegalStateException("User must be logged in to get entries"))
+            return
+        }
         entriesRef.child(userId).get()
             .addOnSuccessListener { snapshot ->
                 val entries = mutableListOf<JournalEntry>()
@@ -151,7 +183,14 @@ class SimpleJournalRepository {
     }
 
     // Get a specific journal entry
-    fun getEntry(entryId: String, userId: String = "testUser", onSuccess: (JournalEntry?) -> Unit, onError: (Exception) -> Unit) {
+    fun getEntry(entryId: String, onSuccess: (JournalEntry?) -> Unit, onError: (Exception) -> Unit) {
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            onError(IllegalStateException("User must be logged in to get entries"))
+            return
+        }
         entriesRef.child(userId).child(entryId).get()
             .addOnSuccessListener { snapshot ->
                 val entry = if (snapshot.exists()) {
@@ -169,7 +208,14 @@ class SimpleJournalRepository {
     }
     
     // Get entries for a specific date
-    fun getEntriesByDate(dateString: String, userId: String = "testUser", onSuccess: (List<JournalEntry>) -> Unit, onError: (Exception) -> Unit) {
+    fun getEntriesByDate(dateString: String, onSuccess: (List<JournalEntry>) -> Unit, onError: (Exception) -> Unit) {
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            onError(IllegalStateException("User must be logged in to get entries"))
+            return
+        }
         println("Querying Firebase for date: $dateString and user: $userId")
         
         // Debug: List all entries to see what's in the database
@@ -215,7 +261,14 @@ class SimpleJournalRepository {
     }
     
     // Check if entries exist for a specific date
-    fun hasEntryForDate(dateString: String, userId: String = "testUser", onSuccess: (Boolean) -> Unit, onError: (Exception) -> Unit) {
+    fun hasEntryForDate(dateString: String, onSuccess: (Boolean) -> Unit, onError: (Exception) -> Unit) {
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            onError(IllegalStateException("User must be logged in to check entries"))
+            return
+        }
         println("Checking for entries on date $dateString for user $userId")
         
         entriesRef.child(userId).orderByChild("date").equalTo(dateString).limitToFirst(1).get()
@@ -241,10 +294,16 @@ class SimpleJournalRepository {
     fun getEntryDatesForRange(
         startDate: String, 
         endDate: String, 
-        userId: String = "testUser",
         onSuccess: (Map<String, Boolean>) -> Unit,
         onError: (Exception) -> Unit
     ) {
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            onError(IllegalStateException("User must be logged in to get entry dates"))
+            return
+        }
         println("Getting entry dates from $startDate to $endDate for user $userId")
         
         // Query all entries for this user

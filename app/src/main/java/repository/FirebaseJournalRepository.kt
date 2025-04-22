@@ -95,7 +95,13 @@ class FirebaseJournalRepository : JournalRepository {
     
     // Get entry by ID
     override suspend fun getJournalEntryById(entryId: String): JournalEntry? {
-        val userId = "testUser" // Default user ID
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            return null
+        }
+        
         return suspendCancellableCoroutine { continuation ->
             entriesRef.child(userId).child(entryId).get()
                 .addOnSuccessListener { snapshot ->
@@ -110,31 +116,32 @@ class FirebaseJournalRepository : JournalRepository {
     
     // Add a new entry
     override suspend fun addJournalEntry(entry: JournalEntry): String {
-        val userId = entry.userId.ifEmpty { "testUser" }
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            throw IllegalStateException("User must be logged in to add journal entries")
+        }
+        
         val entryId = if (entry.id.isNotEmpty()) {
             entry.id
         } else {
             entriesRef.child(userId).push().key ?: ""
         }
         
-        val finalEntry = entry.copy(id = entryId)
+        val finalEntry = entry.copy(id = entryId, userId = userId)
         
         return suspendCancellableCoroutine { continuation ->
             entriesRef.child(userId).child(entryId).setValue(finalEntry)
                 .addOnSuccessListener {
-                    // After successful save, update the mood count
-                    updateMoodCount(
-                        userId = userId,
-                        mood = finalEntry.mood,
-                        onSuccess = {
-                            continuation.resume(entryId)
-                        },
-                        onError = { error ->
-                            // Still resume with ID even if mood count fails
-                            println("Warning: Could not update mood count: ${error.message}")
-                            continuation.resume(entryId)
-                        }
-                    )
+                                    // After successful save, recalculate mood counts
+                    recalculateMoodCounts(userId, onSuccess = {
+                        continuation.resume(entryId)
+                    }, onError = { error ->
+                        // Still resume with ID even if mood count fails
+                        println("Warning: Could not update mood count: ${error.message}")
+                        continuation.resume(entryId)
+                    })
                 }
                 .addOnFailureListener { error ->
                     continuation.resumeWithException(error)
@@ -144,15 +151,24 @@ class FirebaseJournalRepository : JournalRepository {
     
     // Update an existing entry
     override suspend fun updateJournalEntry(entry: JournalEntry): Boolean {
-        val userId = entry.userId.ifEmpty { "testUser" }
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            throw IllegalStateException("User must be logged in to update journal entries")
+        }
+        
         val entryId = entry.id
         
         if (entryId.isEmpty()) {
             throw IllegalArgumentException("Entry ID must not be empty for updates")
         }
         
+        // Ensure the entry has the correct user ID
+        val updatedEntry = entry.copy(userId = userId)
+        
         return suspendCancellableCoroutine { continuation ->
-            entriesRef.child(userId).child(entryId).setValue(entry)
+            entriesRef.child(userId).child(entryId).setValue(updatedEntry)
                 .addOnSuccessListener {
                     continuation.resume(true)
                 }
@@ -164,7 +180,12 @@ class FirebaseJournalRepository : JournalRepository {
     
     // Delete an entry
     override suspend fun deleteJournalEntry(entryId: String): Boolean {
-        val userId = "testUser" // Default user ID
+        val userRepo = UserRepository()
+        val userId = userRepo.getCurrentUserId()
+        
+        if (userId.isEmpty()) {
+            throw IllegalStateException("User must be logged in to delete journal entries")
+        }
         
         return suspendCancellableCoroutine { continuation ->
             entriesRef.child(userId).child(entryId).removeValue()
@@ -196,26 +217,70 @@ class FirebaseJournalRepository : JournalRepository {
             }
     }
     
-    // Update mood count in Firebase
-    fun updateMoodCount(userId: String = "testUser", mood: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
-        // First get the current user data
-        getOrCreateUser(
-            userId = userId,
-            onSuccess = { user ->
-                // Update the mood count
-                val updatedCounts = user.moodCounts.incrementMood(mood)
-                
-                // Save back to Firebase
-                usersRef.child(userId).child("moodCounts").setValue(updatedCounts)
-                    .addOnSuccessListener {
-                        onSuccess()
+    // Recalculate all mood counts based on actual entries
+    fun recalculateMoodCounts(userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        // Get all entries for this user
+        entriesRef.child(userId).get().addOnSuccessListener { entriesSnapshot ->
+            println("Recalculating mood counts for user $userId")
+            
+            // Initialize counters for each mood
+            val moodCounts = mutableMapOf(
+                "happy" to 0,
+                "neutral" to 0,
+                "sad" to 0
+            )
+            
+            // Map to track which dates we've already processed
+            val processedDates = mutableSetOf<String>()
+            
+            // Process all entries
+            entriesSnapshot.children.forEach { entrySnapshot ->
+                val entry = entrySnapshot.getValue(JournalEntry::class.java)
+                entry?.let {
+                    // Only count each date once
+                    if (!processedDates.contains(it.date)) {
+                        // Add the date to processed set
+                        processedDates.add(it.date)
+                        
+                        // Increment the appropriate mood counter
+                        if (it.mood in moodCounts.keys) {
+                            moodCounts[it.mood] = moodCounts[it.mood]!! + 1
+                            println("Counting entry date=${it.date}, mood=${it.mood}")
+                        }
+                    } else {
+                        println("Skipping duplicate date entry: ${it.date}")
                     }
-                    .addOnFailureListener { error ->
-                        onError(error)
-                    }
-            },
-            onError = onError
-        )
+                }
+            }
+            
+            println("Final mood counts after recalculation: $moodCounts")
+            
+            // Convert to MoodCounts object
+            val updatedMoodCounts = MoodCounts(
+                happy = moodCounts["happy"] ?: 0,
+                neutral = moodCounts["neutral"] ?: 0,
+                sad = moodCounts["sad"] ?: 0
+            )
+            
+            // Make sure the user exists
+            getOrCreateUser(
+                userId = userId,
+                onSuccess = { user ->
+                    // Save back to Firebase
+                    usersRef.child(userId).child("moodCounts").setValue(updatedMoodCounts)
+                        .addOnSuccessListener {
+                            onSuccess()
+                        }
+                        .addOnFailureListener { error ->
+                            onError(error)
+                        }
+                },
+                onError = onError
+            )
+        }.addOnFailureListener { error ->
+            println("Failed to get entries for mood count calculation: ${error.message}")
+            onError(error)
+        }
     }
     
     // Get mood counts for a user

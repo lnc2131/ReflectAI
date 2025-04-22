@@ -1,10 +1,23 @@
 package screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
@@ -12,14 +25,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.reflectai.R
 import com.example.reflectai.ui.theme.WindowSize
 import com.example.reflectai.ui.theme.rememberWindowSize
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import model.JournalEntry
 import navigation.Screen
@@ -46,7 +66,6 @@ fun JournalEntryScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val responseText by viewModel.responseText.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    val saveSuccess by viewModel.saveSuccess.collectAsState()
     
     // Get the entry if we're loading an existing one
     val entry by viewModel.entry.collectAsState()
@@ -343,6 +362,7 @@ fun JournalEntryScreen(
                         onClick = {
                             if (content.isNotBlank()) {
                                 scope.launch {
+                                    // Now passing selectedMood as userSelectedMood
                                     viewModel.processJournalEntry(content, selectedMood)
                                 }
                             }
@@ -388,56 +408,13 @@ fun JournalEntryScreen(
                     }
                 }
 
-                // Success message with minimalist styling
-                if (saveSuccess) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.background
-                        )
-                    ) {
-                        Text(
-                            text = "Entry saved successfully!",
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
+                // Success message removed
 
-                // AI Response display with minimalist styling
-                if (responseText.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.background
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp)
-                        ) {
-                            Text(
-                                text = "Therapist Response",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = responseText,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Light
-                                ),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
-                }
+                // Animated therapist with speech bubble
+                AnimatedTherapistResponse(
+                    responseText = responseText,
+                    isVisible = responseText.isNotEmpty()
+                )
             }
         }
     }
@@ -467,6 +444,145 @@ fun MoodButton(
             text = emoji,
             fontSize = 32.sp,
             textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun AnimatedTherapistResponse(
+    responseText: String,
+    isVisible: Boolean
+) {
+    // State to control the animation of the therapist image sliding in
+    val therapistVisible = remember { mutableStateOf(false) }
+    
+    // State for the typing animation
+    var displayedText by remember { mutableStateOf("") }
+    var isTypingComplete by remember { mutableStateOf(false) }
+    
+    // Animation for the therapist image sliding in from the right
+    val therapistOffsetX by animateDpAsState(
+        targetValue = if (therapistVisible.value) 0.dp else 200.dp,
+        animationSpec = tween(
+            durationMillis = 800,
+            easing = FastOutSlowInEasing
+        ),
+        label = "therapistSlideIn"
+    )
+    
+    // Subtle floating animation for the therapist
+    val infiniteTransition = rememberInfiniteTransition(label = "floatingAnimation")
+    val floatingOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "floating"
+    )
+    
+    // Launch typing animation when response changes
+    LaunchedEffect(responseText, isVisible) {
+        if (isVisible && responseText.isNotEmpty()) {
+            // Reset states
+            displayedText = ""
+            isTypingComplete = false
+            therapistVisible.value = true
+            
+            // Wait for therapist to slide in
+            delay(500)
+            
+            // Start typing animation
+            responseText.forEachIndexed { index, char ->
+                displayedText = responseText.substring(0, index + 1)
+                delay(15) // Speed of typing
+            }
+            
+            isTypingComplete = true
+        } else {
+            therapistVisible.value = false
+            displayedText = ""
+            isTypingComplete = false
+        }
+    }
+    
+    // Only show the component if there's text to display
+    if (isVisible) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp)
+                .padding(top = 16.dp)
+        ) {
+            // Speech bubble
+            if (displayedText.isNotEmpty()) {
+                SpeechBubble(
+                    text = displayedText,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(end = 120.dp)
+                        .fillMaxWidth()
+                )
+            }
+            
+            // Therapist image
+            Image(
+                painter = painterResource(id = R.drawable.therapist),
+                contentDescription = "Virtual Therapist",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(180.dp)
+                    .offset(x = therapistOffsetX, y = (-5 + floatingOffset * 10).dp)
+                    .align(Alignment.BottomEnd)
+                    .graphicsLayer {
+                        translationY = floatingOffset * 5
+                    }
+            )
+        }
+    }
+}
+
+@Composable
+fun SpeechBubble(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .padding(16.dp)
+    ) {
+        // Speech bubble shape with a triangle pointer
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f))
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .padding(16.dp)
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = FontWeight.Normal,
+                    lineHeight = 24.sp
+                ),
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+        
+        // Triangle pointer for speech bubble
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .offset(x = (-10).dp, y = 60.dp)
+                .rotate(45f)
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f))
+                .align(Alignment.CenterEnd)
         )
     }
 }
@@ -532,7 +648,7 @@ fun WeekdayButton(
                         .size(6.dp)
                         .background(
                             color = MaterialTheme.colorScheme.primary,
-                            shape = androidx.compose.foundation.shape.CircleShape
+                            shape = CircleShape
                         )
                 )
             }
