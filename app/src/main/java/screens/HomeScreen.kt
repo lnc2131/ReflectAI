@@ -251,7 +251,7 @@ fun HomeScreen(navController: NavController) {
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                 )
                 
-                // Main content area
+                // Main content area with calendar and mood stats at the bottom
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -265,23 +265,6 @@ fun HomeScreen(navController: NavController) {
                         horizontalArrangement = Arrangement.End
                     ) {
                         Row {
-                            OutlinedButton(
-                                onClick = { navController.navigate(Screen.TestAPI.route) },
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                shape = RoundedCornerShape(4.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onBackground
-                                ),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    "Test API",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
                             // Logout button
                             val userRepo = remember { UserRepository() }
                             OutlinedButton(
@@ -323,18 +306,72 @@ fun HomeScreen(navController: NavController) {
     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Calendar grid with mood stats
-                    CalendarGrid(
-                        currentMonth = currentMonth,
-                        datesWithEntries = datesWithEntries,
-                        onDateClick = onDateSelected,
-                        moodCounts = moodCounts,
-                        isLoadingMoodCounts = isLoadingMoodCounts
-                    )
+                    // Calendar grid - without mood stats
+                    Column(modifier = Modifier.weight(1f)) {
+                        // Day of week headers
+                        val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        ) {
+                            daysOfWeek.forEach { day ->
+                                Text(
+                                    text = day,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(vertical = 8.dp),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                                        fontWeight = FontWeight.Light
+                                    )
+                                )
+                            }
+                        }
+
+                        // Calendar days grid
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(7),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(),
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Get all the days in the month, plus padding days for the grid
+                            val firstDayOfMonth = currentMonth.atDay(1)
+                            val lastDayOfMonth = currentMonth.atEndOfMonth()
+
+                            // Padding for days before the 1st of the month
+                            val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value % 7
+                            val paddingDaysStart = (0 until firstDayOfWeek).map { null }
+
+                            // Actual days of the month
+                            val daysInMonth = (1..lastDayOfMonth.dayOfMonth).map { day ->
+                                currentMonth.atDay(day)
+                            }
+
+                            // Combine padding and actual days
+                            val allDays = paddingDaysStart + daysInMonth
+
+                            items(allDays) { date ->
+                                CalendarDay(
+                                    date = date,
+                                    hasEntry = date != null && datesWithEntries.containsKey(date),
+                                    onDateClick = onDateSelected
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Mood stats at the bottom
+                    MoodStats(moodCounts, isLoadingMoodCounts)
                 }
             }
         } else {
-            // Phone layout - just the calendar
+            // Phone layout - just the calendar with mood stats at the bottom
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -349,23 +386,6 @@ fun HomeScreen(navController: NavController) {
                     horizontalArrangement = Arrangement.End
                 ) {
                     Row {
-                        OutlinedButton(
-                            onClick = { navController.navigate(Screen.TestAPI.route) },
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                            shape = RoundedCornerShape(4.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onBackground
-                            ),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                "Test API",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
                         // Logout button
                         val userRepo = remember { UserRepository() }
                         OutlinedButton(
@@ -407,14 +427,68 @@ fun HomeScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Calendar grid with mood stats
-                CalendarGrid(
-                    currentMonth = currentMonth,
-                    datesWithEntries = datesWithEntries,
-                    onDateClick = onDateSelected,
-                    moodCounts = moodCounts,
-                    isLoadingMoodCounts = isLoadingMoodCounts
-                )
+                // Calendar grid (without mood stats)
+                Column(modifier = Modifier.weight(1f)) {
+                    // Day of week headers
+                    val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        daysOfWeek.forEach { day ->
+                            Text(
+                                text = day,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(vertical = 8.dp),
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                                    fontWeight = FontWeight.Light
+                                )
+                            )
+                        }
+                    }
+
+                    // Calendar days grid
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(7),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                        contentPadding = PaddingValues(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Get all the days in the month, plus padding days for the grid
+                        val firstDayOfMonth = currentMonth.atDay(1)
+                        val lastDayOfMonth = currentMonth.atEndOfMonth()
+
+                        // Padding for days before the 1st of the month
+                        val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value % 7
+                        val paddingDaysStart = (0 until firstDayOfWeek).map { null }
+
+                        // Actual days of the month
+                        val daysInMonth = (1..lastDayOfMonth.dayOfMonth).map { day ->
+                            currentMonth.atDay(day)
+                        }
+
+                        // Combine padding and actual days
+                        val allDays = paddingDaysStart + daysInMonth
+
+                        items(allDays) { date ->
+                            CalendarDay(
+                                date = date,
+                                hasEntry = date != null && datesWithEntries.containsKey(date),
+                                onDateClick = onDateSelected
+                            )
+                        }
+                    }
+                }
+                
+                // Mood stats at the bottom
+                MoodStats(moodCounts, isLoadingMoodCounts)
             }
         }
     }
@@ -470,70 +544,9 @@ fun CalendarGrid(
     moodCounts: MoodCounts,
     isLoadingMoodCounts: Boolean
 ) {
-    // These will be the day headers (S, M, T, W, T, F, S)
-    val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Day of week headers
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-        ) {
-            daysOfWeek.forEach { day ->
-                Text(
-                    text = day,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 8.dp),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Light
-                    )
-                )
-            }
-        }
-
-        // Calendar days - slightly smaller to make room for stats
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(7),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Get all the days in the month, plus padding days for the grid
-            val firstDayOfMonth = currentMonth.atDay(1)
-            val lastDayOfMonth = currentMonth.atEndOfMonth()
-
-            // Padding for days before the 1st of the month
-            val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value % 7
-            val paddingDaysStart = (0 until firstDayOfWeek).map { null }
-
-            // Actual days of the month
-            val daysInMonth = (1..lastDayOfMonth.dayOfMonth).map { day ->
-                currentMonth.atDay(day)
-            }
-
-            // Combine padding and actual days
-            val allDays = paddingDaysStart + daysInMonth
-
-            items(allDays) { date ->
-                CalendarDay(
-                    date = date,
-                    hasEntry = date != null && datesWithEntries.containsKey(date),
-                    onDateClick = onDateClick
-                )
-            }
-        }
-        
-        // Add mood statistics section
-        Spacer(modifier = Modifier.height(16.dp))
-        MoodStats(moodCounts, isLoadingMoodCounts)
-    }
+    // Note: This function is kept for backward compatibility but the implementation 
+    // has been moved directly into the HomeScreen layouts
+    // This implementation is no longer used - see the inline calendar implementation in HomeScreen
 }
 
 @Composable

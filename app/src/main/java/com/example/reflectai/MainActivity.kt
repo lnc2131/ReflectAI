@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             ReflectAITheme {
                 val navController = rememberNavController()
+                
                 Scaffold {innerPadding ->
                     AppNavigation(
                         navController = navController,

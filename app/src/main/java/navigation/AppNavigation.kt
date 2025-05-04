@@ -11,7 +11,6 @@ import androidx.compose.runtime.remember
 import screens.JournalEntryViewModel
 import screens.JournalEntryScreen
 import screens.LoginScreen
-import screens.TestAPIScreen
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -42,7 +41,6 @@ sealed class Screen(val route: String) {
     }
     
     object Settings : Screen("settings")
-    object TestAPI : Screen("test_api")
 }
 
 @Composable
@@ -135,8 +133,5 @@ fun AppNavigation(
             // SettingsScreen(navController)
         }
 
-        composable(Screen.TestAPI.route) {
-            TestAPIScreen(onBackClick = { navController.navigateUp() })
-        }
     }
 }
