@@ -33,7 +33,6 @@ import model.JournalEntry
 import model.MoodCounts
 import model.User
 import navigation.Screen
-import repository.FirebaseJournalRepository
 import repository.SimpleJournalRepository
 import repository.UserRepository
 import java.time.LocalDate

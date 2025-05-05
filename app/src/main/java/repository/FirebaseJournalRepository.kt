@@ -16,6 +16,13 @@ import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/**
+ * NOTE: This class currently serves as a reference implementation for JournalRepository.
+ * The app is currently using SimpleJournalRepository instead of this implementation.
+ * 
+ * This class implements JournalRepository with coroutine and Flow support for future use.
+ * It is kept here for eventual migration from callback-based to coroutine-based code.
+ */
 class FirebaseJournalRepository : JournalRepository {
     // Reference to Firebase database
     private val database = FirebaseDatabase.getInstance()

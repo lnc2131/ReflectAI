@@ -1,5 +1,11 @@
 package screens
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import api.OpenAIClient
@@ -11,12 +17,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import model.AIAnalysis
 import model.JournalEntry
-import repository.FirebaseJournalRepository
 import repository.SimpleJournalRepository
 import repository.UserRepository
-import service.SentimentAnalysisService
+import utils.PermissionUtils
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 
 class JournalEntryViewModel(
@@ -33,7 +39,9 @@ class JournalEntryViewModel(
     private val _errorMessage = MutableStateFlow("")
     val errorMessage: StateFlow<String> = _errorMessage
 
-    // Removed save success state - we'll just handle it via loading state
+    // State for speech recognition
+    private val _isListening = MutableStateFlow(false)
+    val isListening: StateFlow<Boolean> = _isListening
     
     // Entry state for loading existing entries
     private val _entry = MutableStateFlow<JournalEntry?>(null)
@@ -41,12 +49,14 @@ class JournalEntryViewModel(
     
     // Repository for Firebase operations
     private val simpleRepository = SimpleJournalRepository()
-    private val repository = FirebaseJournalRepository()
     private val userRepository = UserRepository()
     
     // Current date or entry ID
     private var currentDate: String? = null
     private var currentEntryId: String? = null
+    
+    // Speech to text result handler
+    private var speechTextResultCallback: ((String) -> Unit)? = null
     
     init {
         // Set initial values from constructor
@@ -173,6 +183,52 @@ class JournalEntryViewModel(
     fun signOut(onComplete: () -> Unit) {
         userRepository.signOut()
         onComplete()
+    }
+    
+    /**
+     * Handles speech recognition intent
+     */
+    fun startSpeechToText(activity: Activity, callback: (String) -> Unit) {
+        // Check microphone permission first
+        if (!utils.PermissionUtils.checkMicrophonePermission(activity)) {
+            _errorMessage.value = "Microphone permission is required for speech to text"
+            return
+        }
+        
+        speechTextResultCallback = callback
+        _isListening.value = true
+        
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your journal entry")
+        }
+        
+        try {
+            activity.startActivityForResult(intent, SPEECH_REQUEST_CODE)
+        } catch (e: Exception) {
+            _errorMessage.value = "Speech recognition not available on this device"
+            _isListening.value = false
+        }
+    }
+    
+    /**
+     * Process speech recognition results
+     */
+    fun processSpeechResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        _isListening.value = false
+        
+        if (requestCode == SPEECH_REQUEST_CODE && resultCode == Activity.RESULT_OK && data != null) {
+            val result = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            if (!result.isNullOrEmpty()) {
+                val spokenText = result[0]
+                speechTextResultCallback?.invoke(spokenText)
+            }
+        }
+    }
+    
+    companion object {
+        private const val SPEECH_REQUEST_CODE = 100
     }
 
     // Process entry and save

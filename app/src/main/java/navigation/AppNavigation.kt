@@ -40,7 +40,7 @@ sealed class Screen(val route: String) {
         fun createRoute(entryId: String) = "entry_detail/$entryId"
     }
     
-    object Settings : Screen("settings")
+    // Settings screen removed as it's not implemented
 }
 
 @Composable
@@ -128,10 +128,7 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.Settings.route) {
-            // SettingsScreen will be created later
-            // SettingsScreen(navController)
-        }
+        // Settings screen route removed as it's not implemented
 
     }
 }

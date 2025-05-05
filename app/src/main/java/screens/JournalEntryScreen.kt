@@ -22,7 +22,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,12 +33,14 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.reflectai.MainActivity
 import com.example.reflectai.R
 import com.example.reflectai.ui.theme.WindowSize
 import com.example.reflectai.ui.theme.rememberWindowSize
@@ -68,6 +71,7 @@ fun JournalEntryScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val responseText by viewModel.responseText.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isListening by viewModel.isListening.collectAsState()
     
     // Get the entry if we're loading an existing one
     val entry by viewModel.entry.collectAsState()
@@ -87,6 +91,15 @@ fun JournalEntryScreen(
     
     // Map to track dates with entries
     val datesWithEntries = remember { mutableStateMapOf<LocalDate, Boolean>() }
+    
+    // Register the ViewModel with MainActivity for speech recognition
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        // Set the ViewModel in MainActivity for activity result handling
+        if (context is MainActivity) {
+            context.setViewModel(viewModel)
+        }
+    }
     
     // Load entries for the current week for the sidebar
     LaunchedEffect(currentDate) {
@@ -180,7 +193,7 @@ fun JournalEntryScreen(
                     // Back button
                     IconButton(onClick = onBackClick) {
                         Icon(
-                            imageVector = Icons.Rounded.ArrowBack,
+                            imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Go Back"
                         )
                     }
@@ -311,26 +324,69 @@ fun JournalEntryScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
 
-                // Content input with minimal styling
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("What's on your mind today?") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    shape = RoundedCornerShape(4.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedLabelColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                        focusedLabelColor = MaterialTheme.colorScheme.primary
-                    ),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Light
-                    ),
-                    minLines = 5
-                )
+                // Content input with minimal styling and speech button
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)) {
+                    
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = { content = it },
+                        label = { Text("What's on your mind today?") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                        shape = RoundedCornerShape(4.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            focusedLabelColor = MaterialTheme.colorScheme.primary
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = FontWeight.Light
+                        ),
+                        minLines = 5
+                    )
+                    
+                    // Speech to text microphone button
+                    FloatingActionButton(
+                        onClick = { 
+                            // Get the Activity context for startActivityForResult
+                            val activity = context as? MainActivity
+                            if (activity != null) {
+                                viewModel.startSpeechToText(activity) { spokenText ->
+                                    // Append spoken text to current content
+                                    content = if (content.isBlank()) {
+                                        spokenText
+                                    } else {
+                                        "$content $spokenText"
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .size(48.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ) {
+                        if (isListening) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Speech to text",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
 
                 // Button row with minimalist design
                 Row(
